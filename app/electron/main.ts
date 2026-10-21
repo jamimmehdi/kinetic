@@ -18,9 +18,11 @@ interface AppSettings {
   autoUpdate: boolean;
   /** The first-launch guide has been completed or skipped. */
   setupDone: boolean;
+  /** Step aside for games with kernel anti-cheat (Valorant and similar). */
+  gameGuard: boolean;
 }
 
-const DEFAULT_SETTINGS: AppSettings = { startWithWindows: false, minimizeToTray: true, autoUpdate: true, setupDone: false };
+const DEFAULT_SETTINGS: AppSettings = { startWithWindows: false, minimizeToTray: true, autoUpdate: true, setupDone: false, gameGuard: true };
 
 let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -44,6 +46,7 @@ function loadSettings(): AppSettings {
       minimizeToTray: parsed.minimizeToTray !== false,
       autoUpdate: parsed.autoUpdate !== false,
       setupDone: parsed.setupDone === true,
+      gameGuard: parsed.gameGuard !== false,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -104,6 +107,7 @@ function connectToEngine() {
     buffer = "";
     connected = true;
     toRenderer("engine:status", { connected: true });
+    send({ cmd: "set_game_guard", enabled: settings.gameGuard });
     send({ cmd: "snapshot" });
   });
 
@@ -228,8 +232,10 @@ ipcMain.handle("app:setSettings", (_e, patch: Partial<AppSettings>) => {
     minimizeToTray: pick("minimizeToTray"),
     autoUpdate: pick("autoUpdate"),
     setupDone: pick("setupDone"),
+    gameGuard: pick("gameGuard"),
   };
   saveSettings();
+  send({ cmd: "set_game_guard", enabled: settings.gameGuard });
   applyLoginItem();
   return settings;
 });

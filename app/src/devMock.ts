@@ -25,7 +25,7 @@ export function installDevMock() {
   let moving = false;
   let pollingHz = 1000;
   let settings: AppSettings = {
-    startWithWindows: false, minimizeToTray: true, autoUpdate: true,
+    startWithWindows: false, minimizeToTray: true, autoUpdate: true, gameGuard: true,
     setupDone: (() => { try { return localStorage.getItem(setupDoneKey) === "1"; } catch { return false; } })(),
   };
   let candidates: LearnCandidate[] = [];

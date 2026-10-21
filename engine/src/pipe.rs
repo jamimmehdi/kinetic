@@ -178,6 +178,7 @@ fn handle_command(text: &str) {
                 razer::request_polling(hz as u32);
             }
         }
+        Some("set_game_guard") => state::set_guard(cmd.get("enabled").and_then(Value::as_bool).unwrap_or(true)),
         Some("device_report") => report::publish(),
         Some("measure_start") => measure::start(cmd.get("cm").and_then(Value::as_f64).unwrap_or(10.0)),
         Some("measure_finish") => measure::finish(),

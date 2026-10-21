@@ -281,6 +281,7 @@ export interface AppSettings {
   minimizeToTray: boolean;
   autoUpdate: boolean;
   setupDone: boolean;
+  gameGuard: boolean;
 }
 
 export type UpdateStatus =

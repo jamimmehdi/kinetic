@@ -120,6 +120,10 @@ export function SettingsScreen({ engine, onRunSetup, onCalibrate, onRequestSuppo
           <Toggle label="Keep running in the tray" on={!!app?.minimizeToTray} disabled={!app} onChange={(v) => change({ minimizeToTray: v })} />
         </div>
         <div className="row plain" style={{ borderTop: "1px solid var(--bd)" }}>
+          <span>Pause for games with anti-cheat<span className="sub" style={{ display: "block", fontSize: 12 }}>Valorant and similar block input from other programs and can freeze the pointer. Turning this off runs Kinetic in them anyway, at your own risk of a freeze or a flag from the anti-cheat.</span></span>
+          <Toggle label="Pause for games with anti-cheat" on={app?.gameGuard !== false} disabled={!app} onChange={(v) => change({ gameGuard: v })} />
+        </div>
+        <div className="row plain" style={{ borderTop: "1px solid var(--bd)" }}>
           <span>Engine</span>
           <span className="sub">{engine.connected ? `Running · version ${engine.version ?? "?"}` : "Not running"}</span>
         </div>

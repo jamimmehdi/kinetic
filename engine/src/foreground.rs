@@ -106,6 +106,12 @@ fn apply(hwnd: HWND) {
     refresh();
 }
 
+/// Re-checks whether the app that was last in front is a protected game.
+pub fn refresh_game() {
+    let exe = LAST_APP.lock().map(|l| l.clone()).unwrap_or_default();
+    crate::state::set_game(is_protected_game(&exe));
+}
+
 /// Re-evaluates the active profile for the last known app and tells every client.
 pub fn refresh() {
     let exe = LAST_APP.lock().map(|l| l.clone()).unwrap_or_default();

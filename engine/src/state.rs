@@ -9,6 +9,8 @@ static PAUSED: AtomicBool = AtomicBool::new(false);
 /// Why the engine stepped aside on its own: 0 not, 1 a protected game is in front, 2 injected input
 /// was being dropped.
 static ASIDE: AtomicU8 = AtomicU8::new(0);
+/// Whether to step aside for protected games at all. On by default; the user can turn it off.
+static GUARD: AtomicBool = AtomicBool::new(true);
 const GAME: u8 = 1;
 const BLOCKED: u8 = 2;
 /// After input was blocked, try again this long later even if the user stays in the same window.
@@ -32,7 +34,21 @@ pub fn aside_reason() -> Option<&'static str> {
 /// A protected game came to the front or left it. Leaving also ends a "blocked" step-aside, so
 /// switching windows is a retry.
 pub fn set_game(on: bool) {
-    set_aside(if on { GAME } else { 0 });
+    set_aside(if on && guard_enabled() { GAME } else { 0 });
+}
+
+pub fn guard_enabled() -> bool {
+    GUARD.load(Ordering::Relaxed)
+}
+
+/// Turn stepping aside for protected games on or off. Turning it off ends a game pause now.
+pub fn set_guard(enabled: bool) {
+    GUARD.store(enabled, Ordering::Relaxed);
+    if !enabled && ASIDE.load(Ordering::Relaxed) == GAME {
+        set_aside(0);
+    } else if enabled {
+        crate::foreground::refresh_game();
+    }
 }
 
 /// Injected input is being dropped (anti-cheat driver or similar). Step aside, and retry later.
