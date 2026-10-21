@@ -11,6 +11,9 @@ static PAUSED: AtomicBool = AtomicBool::new(false);
 static ASIDE: AtomicU8 = AtomicU8::new(0);
 /// Whether to step aside for protected games at all. On by default; the user can turn it off.
 static GUARD: AtomicBool = AtomicBool::new(true);
+/// Whether to release the mouse when injected input is being refused. On by default: without it a
+/// blocked pointer simply freezes.
+static FAILSAFE: AtomicBool = AtomicBool::new(true);
 const GAME: u8 = 1;
 const BLOCKED: u8 = 2;
 /// After input was blocked, try again this long later even if the user stays in the same window.
@@ -35,6 +38,23 @@ pub fn aside_reason() -> Option<&'static str> {
 /// switching windows is a retry.
 pub fn set_game(on: bool) {
     set_aside(if on && guard_enabled() { GAME } else { 0 });
+}
+
+pub fn failsafe_enabled() -> bool {
+    FAILSAFE.load(Ordering::Relaxed)
+}
+
+pub fn set_failsafe(enabled: bool) {
+    FAILSAFE.store(enabled, Ordering::Relaxed);
+    if !enabled && ASIDE.load(Ordering::Relaxed) == BLOCKED {
+        set_aside(0);
+    }
+}
+
+/// The emergency hotkey: pause or resume everything the engine does to input, even when the pointer
+/// is frozen. Pausing hands the mouse back to Windows.
+pub fn emergency_toggle() {
+    set_paused(!PAUSED.load(Ordering::Relaxed));
 }
 
 pub fn guard_enabled() -> bool {

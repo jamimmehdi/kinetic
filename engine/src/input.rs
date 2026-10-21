@@ -14,10 +14,14 @@ use windows::Win32::UI::Input::{
     RAWINPUT, RAWINPUTDEVICE, RAWINPUTDEVICELIST, RAWINPUTHEADER, RIDEV_DEVNOTIFY, RIDEV_INPUTSINK, RIDEV_PAGEONLY, RIDEV_REMOVE,
     RIDI_DEVICEINFO, RIDI_DEVICENAME, RID_DEVICE_INFO, RID_HEADER, RID_INPUT, RIM_TYPEHID, RIM_TYPEKEYBOARD, RIM_TYPEMOUSE,
 };
+use windows::Win32::UI::Input::KeyboardAndMouse::{RegisterHotKey, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, MOD_SHIFT};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, RegisterClassW, HWND_MESSAGE, WINDOW_EX_STYLE, WINDOW_STYLE, WM_INPUT,
+    CreateWindowExW, DefWindowProcW, RegisterClassW, HWND_MESSAGE, WINDOW_EX_STYLE, WINDOW_STYLE, WM_HOTKEY, WM_INPUT,
     WM_INPUT_DEVICE_CHANGE, WNDCLASSW,
 };
+
+/// Ctrl+Alt+Shift+P pauses or resumes the engine, even when the pointer is not moving.
+const EMERGENCY_KEY: u32 = 0x50;
 
 // usButtonFlags bits (RI_MOUSE_*), pairs of (down, up) for buttons 1 to 5.
 const BUTTON_FLAGS: [(u16, u16); 5] = [(0x001, 0x002), (0x004, 0x008), (0x010, 0x020), (0x040, 0x080), (0x100, 0x200)];
@@ -54,6 +58,8 @@ pub fn create_window() -> Result<HWND> {
         )?;
         WINDOW.store(hwnd.0 as isize, Ordering::Relaxed);
         register(hwnd)?;
+        // If another program already owns the hotkey the engine still runs, just without it.
+        let _ = RegisterHotKey(Some(hwnd), 1, MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT, EMERGENCY_KEY);
         Ok(hwnd)
     }
 }
@@ -96,6 +102,7 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam:
     match msg {
         WM_INPUT => handle_raw(lparam),
         WM_INPUT_DEVICE_CHANGE => publish_devices(),
+        WM_HOTKEY => crate::state::emergency_toggle(),
         _ => {}
     }
     DefWindowProcW(hwnd, msg, wparam, lparam)

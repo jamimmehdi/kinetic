@@ -22,9 +22,11 @@ interface AppSettings {
   gameGuard: boolean;
   /** Record what Kinetic does (and whether it worked) to a log file. */
   activityLog: boolean;
+  /** Release the mouse when Windows refuses the input Kinetic sends. */
+  blockedFailsafe: boolean;
 }
 
-const DEFAULT_SETTINGS: AppSettings = { startWithWindows: false, minimizeToTray: true, autoUpdate: true, setupDone: false, gameGuard: true, activityLog: false };
+const DEFAULT_SETTINGS: AppSettings = { startWithWindows: false, minimizeToTray: true, autoUpdate: true, setupDone: false, gameGuard: true, activityLog: false, blockedFailsafe: true };
 
 let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -50,6 +52,7 @@ function loadSettings(): AppSettings {
       setupDone: parsed.setupDone === true,
       gameGuard: parsed.gameGuard !== false,
       activityLog: parsed.activityLog === true,
+      blockedFailsafe: parsed.blockedFailsafe !== false,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -112,6 +115,7 @@ function connectToEngine() {
     toRenderer("engine:status", { connected: true });
     send({ cmd: "set_game_guard", enabled: settings.gameGuard });
     send({ cmd: "set_activity_log", enabled: settings.activityLog });
+    send({ cmd: "set_failsafe", enabled: settings.blockedFailsafe });
     send({ cmd: "snapshot" });
   });
 
@@ -238,10 +242,12 @@ ipcMain.handle("app:setSettings", (_e, patch: Partial<AppSettings>) => {
     setupDone: pick("setupDone"),
     gameGuard: pick("gameGuard"),
     activityLog: pick("activityLog"),
+    blockedFailsafe: pick("blockedFailsafe"),
   };
   saveSettings();
   send({ cmd: "set_game_guard", enabled: settings.gameGuard });
   send({ cmd: "set_activity_log", enabled: settings.activityLog });
+  send({ cmd: "set_failsafe", enabled: settings.blockedFailsafe });
   applyLoginItem();
   return settings;
 });

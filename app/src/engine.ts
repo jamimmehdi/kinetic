@@ -286,6 +286,7 @@ export interface AppSettings {
   setupDone: boolean;
   gameGuard: boolean;
   activityLog: boolean;
+  blockedFailsafe: boolean;
 }
 
 /** One line of the activity log. `detail` never holds key names. */

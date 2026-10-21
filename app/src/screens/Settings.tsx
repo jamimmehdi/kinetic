@@ -200,6 +200,10 @@ export function SettingsScreen({ engine, onRunSetup, onCalibrate, onRequestSuppo
           <Toggle label="Pause for games with anti-cheat" on={app?.gameGuard !== false} disabled={!app} onChange={(v) => change({ gameGuard: v })} />
         </div>
         <div className="row plain" style={{ borderTop: "1px solid var(--bd)" }}>
+          <span>Release the mouse when input is blocked<span className="sub" style={{ display: "block", fontSize: 12 }}>If Windows refuses the input Kinetic sends, Kinetic steps aside so the pointer keeps working. Turn this off and the pointer freezes instead. Ctrl+Alt+Shift+P pauses Kinetic if that happens.</span></span>
+          <Toggle label="Release the mouse when input is blocked" on={app?.blockedFailsafe !== false} disabled={!app} onChange={(v) => change({ blockedFailsafe: v })} />
+        </div>
+        <div className="row plain" style={{ borderTop: "1px solid var(--bd)" }}>
           <span>Engine</span>
           <span className="sub">{engine.connected ? `Running · version ${engine.version ?? "?"}` : "Not running"}</span>
         </div>
