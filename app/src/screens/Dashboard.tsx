@@ -62,7 +62,7 @@ export function DashboardScreen({ engine }: { engine: EngineState }) {
             viewBox="20 110 940 760"
             role="img"
             aria-label="Line drawing of a wireless mouse"
-            style={{ position: "absolute", right: 28, top: "50%", transform: "translateY(-50%)", height: "84%", maxHeight: 440, maxWidth: "58%", width: "auto" }}
+            style={{ position: "absolute", right: 28, top: "50%", transform: "translateY(-50%)", height: "84%", maxHeight: 440, maxWidth: "50%", width: "auto" }}
           >
             <path d={wirelessMouse.outline} fillRule="evenodd" style={{ fill: "var(--line)" }} />
           </svg>

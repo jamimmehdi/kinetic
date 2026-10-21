@@ -3,6 +3,7 @@ import {
   type AppSettings, type EngineConfig, type EngineMessage, type KineticBridge, type LearnCandidate, type UpdateStatus,
 } from "./engine";
 
+const hwConnected = !location.search.includes("nohw");
 const setupDoneKey = "kinetic.mock.setupDone";
 
 /**
@@ -49,7 +50,7 @@ export function installDevMock() {
         cb({ t: "engine", paused });
         cb({ t: "layer", shift: false });
         cb(dpiMessage());
-        cb({ t: "hardware", connected: true, vendor: "Razer", dpi_x: stageDpi(perf(), stage)[0], dpi_y: stageDpi(perf(), stage)[1], polling_hz: pollingHz, polling_options: [125, 500, 1000], can_set_polling: true, can_set_dpi: true, battery: 69 });
+        cb({ t: "hardware", connected: hwConnected, vendor: "Razer", dpi_x: stageDpi(perf(), stage)[0], dpi_y: stageDpi(perf(), stage)[1], polling_hz: pollingHz, polling_options: [125, 500, 1000], can_set_polling: true, can_set_dpi: true, battery: 69 });
       });
       return () => messageListeners.delete(cb);
     },
@@ -94,7 +95,7 @@ export function installDevMock() {
           if (hz && [125, 500, 1000].includes(hz)) {
             pollingHz = hz;
             const [x, y] = stageDpi(perf(), stage);
-            emit({ t: "hardware", connected: true, vendor: "Razer", dpi_x: x, dpi_y: y, polling_hz: pollingHz, polling_options: [125, 500, 1000], can_set_polling: true, can_set_dpi: true, battery: 69 });
+            emit({ t: "hardware", connected: hwConnected, vendor: "Razer", dpi_x: x, dpi_y: y, polling_hz: pollingHz, polling_options: [125, 500, 1000], can_set_polling: true, can_set_dpi: true, battery: 69 });
           }
           break;
         }
