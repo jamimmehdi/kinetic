@@ -1,6 +1,6 @@
 # Kinetic
 
-**Universal mouse control for Windows.** Remap every button, build macros, switch profiles per app, shape pointer acceleration and DPI, and see what your mouse is really doing, on any brand of mouse.
+**Universal mouse control for Windows.** Remap every button, build macros, switch profiles per app, shape pointer acceleration and DPI, and see what your mouse is really doing, on any brand of mouse. In games with kernel-level anti-cheat, an optional **kernel mode** hands the movement work to the Raw Accel driver so it keeps working there.
 
 [**Download the latest release**](https://github.com/jamimmehdi/kinetic/releases/latest) · [Report a problem](https://github.com/jamimmehdi/kinetic/issues) · [Request support for a mouse](#requesting-support-for-your-mouse)
 
@@ -14,15 +14,16 @@ Kinetic is a small open-source alternative to vendor mouse software. It works wi
 - [Using Kinetic](#using-kinetic) (every screen)
 - [DPI on any mouse: measure and calibrate](#dpi-on-any-mouse-measure-and-calibrate)
 - [Games and anti-cheat](#games-and-anti-cheat)
-  - [Kernel mode (Raw Accel)](#kernel-mode-raw-accel)
+- [Kernel mode (Raw Accel) in detail](#kernel-mode-raw-accel-in-detail)
 - [What works on which mouse](#what-works-on-which-mouse)
 - [Updates](#updates)
 - [Requesting support for your mouse](#requesting-support-for-your-mouse)
 - [Troubleshooting](#troubleshooting)
+- [Where Kinetic keeps its files](#where-kinetic-keeps-its-files)
 - [Build from source](#build-from-source)
 - [How it works](#how-it-works)
 - [Contributing and releasing](#contributing-and-releasing)
-- [License](#license)
+- [Credits and licence](#credits-and-licence)
 
 ## What it does
 
@@ -44,6 +45,16 @@ Kinetic is a small open-source alternative to vendor mouse software. It works wi
 
 Things no software can do, because the mouse's sensor does not expose them: lift-off distance, motion sync and surface tuning on a basic mouse, or reading a sensor's true DPI on a mouse with no protocol support. Kinetic marks these clearly instead of pretending.
 
+**What works in games with kernel-level anti-cheat** (Riot Vanguard, Easy Anti-Cheat, BattlEye and similar) depends on where the work runs:
+
+| Feature | Kinetic's own engine | Kernel mode (Raw Accel) | Stored on the mouse |
+|---|:---:|:---:|:---:|
+| DPI scaling, acceleration, rotation, angle snapping, smoothing | ❌ blocked | ✅ | |
+| Button remaps, macros, Shift layer | ❌ blocked | ❌ not covered | |
+| DPI stages, polling rate, simple button remaps | | | ✅ (needs the brand's protocol) |
+
+Details are in [Games and anti-cheat](#games-and-anti-cheat) and [Kernel mode in detail](#kernel-mode-raw-accel-in-detail).
+
 ## Install
 
 1. Open the [latest release](https://github.com/jamimmehdi/kinetic/releases/latest).
@@ -51,7 +62,7 @@ Things no software can do, because the mouse's sensor does not expose them: lift
 3. Windows SmartScreen may say *"Windows protected your PC"* because the installer is not code-signed yet. Choose **More info**, then **Run anyway**.
 4. Finish the installer and start **Kinetic** from the Start menu.
 
-**Requirements:** Windows 10 or 11, 64-bit. No admin rights are needed to use Kinetic.
+**Requirements:** Windows 10 or 11, 64-bit. No admin rights are needed to use Kinetic. The only thing that asks for administrator approval is the optional [Raw Accel driver](#kernel-mode-raw-accel-in-detail) install.
 
 Kinetic keeps running in the system tray when you close the window, so your remaps keep working. Quit it from the tray icon.
 
@@ -81,13 +92,15 @@ Kinetic has seven screens, reached from the rail on the left. The sun/moon butto
 
 ### Dashboard
 
-A live view of your mouse: the current DPI and stage, polling rate, battery (where the mouse reports it), engine latency, a 10-second pointer-speed graph, the active layer, and which profile is active and why. **Pause engine** turns off everything Kinetic does to input until you press it again.
+A live view of your mouse: the current DPI and stage, polling rate, battery (where the mouse reports it), engine latency, a 10-second pointer-speed graph, the active layer, and which profile is active and why.
 
 ![Dashboard (dark)](docs/screenshots/dashboard.png)
 
 ![Dashboard (light)](docs/screenshots/dashboard-light.png)
 
-Click a DPI stage on the right to switch to it. The auto-switch card shows how many apps are linked to profiles.
+- Click a DPI stage on the right to switch to it. The auto-switch card shows how many apps are linked to profiles.
+- **Pause engine** turns off everything Kinetic's engine does to input until you press it again. In kernel mode it also sets the driver back to neutral.
+- The button changes to **Paused for a game** when a protected game is in front, or **Paused: input blocked** when Windows is refusing the input Kinetic sends. Both clear on their own (see [Games and anti-cheat](#games-and-anti-cheat)).
 
 ### Buttons
 
@@ -114,6 +127,8 @@ Use **Base layer / Shift layer** at the top to edit the second set of mappings, 
 
 **Safety rule:** the left mouse button can never be remapped, so you cannot lock yourself out.
 
+Button remaps work by catching the button press and sending a different input, which anti-cheat games refuse. They are therefore off in those games, in kernel mode too.
+
 ### Performance
 
 Sensitivity, polling and pointer feel for the profile you are editing (pick it at the top).
@@ -123,7 +138,7 @@ Sensitivity, polling and pointer feel for the profile you are editing (pick it a
 - **Sensitivity:** one dial per axis. Switch on **Independent** to set X and Y separately. The numbered chips are your DPI stages (**＋** adds one, **－** removes the selected one, up to 8). Stages are always kept in ascending order. Presets set the selected stage to 400, 800, 1200, 1600, 2000, 2400, 3200 or 4000.
 - **Set the mouse's own DPI** (mice Kinetic can talk to): the mouse itself runs at the stage's DPI and reports the real value back. If the mouse's own DPI button is pressed, Kinetic follows it.
 - **Polling rate:** on supported mice, pick 125, 500 or 1000 Hz. On other mice it shows the rate it measures, read only.
-- **Pointer feel:** raw 1:1 movement, angle snapping, smoothing.
+- **Pointer feel:** raw 1:1 movement (turns off Windows' own pointer acceleration while Kinetic processes movement), angle snapping, and smoothing. Smoothing goes up to 0.98, and the label beside the slider shows how long it takes to catch up halfway in milliseconds (about 3 ms at 0.8, 14 ms at 0.95, 34 ms at 0.98 on a 1000 Hz mouse). More smoothing means more delay between your hand and the pointer.
 - **Scroll:** lines per notch, smooth scrolling, reverse direction.
 - **Sensor tuning:** lift-off distance, motion sync and surface calibration are shown locked because they need a mouse-specific protocol.
 
@@ -142,7 +157,7 @@ Choose how hand speed turns into pointer speed. The graph is the curve; the numb
 - **Parameters** (shown for the mode you choose): growth rate, midpoint, maximum multiplier, and an optional speed cap.
 - **Direction:** rotation, vertical ratio, and **curve per axis** for separate horizontal and vertical curves.
 
-The curve math is the same in the interface and the engine, and a test checks that they agree.
+The curve math is the same in the interface and the engine, and a test checks that they agree. In kernel mode the finished curve is sent to the driver as a table of points, so it keeps the same shape.
 
 ### Macros
 
@@ -172,12 +187,21 @@ Anything a profile leaves unmapped falls back to the Default profile. Settings c
 
 ![Settings](docs/screenshots/settings.png)
 
-- **Dark theme**, **Start with Windows** (opens in the tray at sign-in), **Keep running in the tray** when the window is closed.
-- **First-launch setup:** run the button guide again.
-- **DPI stages:** calibrate your mouse's DPI button.
-- **Request support:** send your mouse's details to GitHub.
-- **Updates:** current version, **Check for updates**, and automatic checks. Nothing installs until you say so.
-- The three columns summarise what works on any mouse, what needs a brand's protocol, and what is not possible.
+| Setting | What it does |
+|---|---|
+| **Dark theme** | Switches between the dark and light theme |
+| **Start with Windows** | Opens Kinetic in the tray at sign-in so remaps work straight away |
+| **Keep running in the tray** | Closing the window keeps the engine and your remaps running |
+| **Pause for games with anti-cheat** | On by default. Kinetic's engine steps aside while a protected game is in front |
+| **Release the mouse when input is blocked** | On by default. If Windows refuses the input Kinetic sends, the engine steps aside so the pointer keeps working |
+| **First-launch setup** | Runs the button guide again |
+| **DPI stages** | **Calibrate** your mouse's DPI button and the DPI of each stage |
+| **Request support** | Sends your mouse's details to GitHub |
+| **Kernel mode (Raw Accel)** | Installs the Raw Accel driver and hands it the movement work (see [below](#kernel-mode-raw-accel-in-detail)) |
+| **Activity log** | Off by default. Records what Kinetic did and whether Windows accepted it |
+| **Updates** | Current version, **Check for updates**, and automatic checks. Nothing installs until you say so |
+
+The three columns at the bottom summarise what works on any mouse, what needs a brand's protocol, and what is not possible.
 
 ## DPI on any mouse: measure and calibrate
 
@@ -209,45 +233,113 @@ The stage is remembered per mouse model. Kinetic cannot ask the mouse which stag
 
 ## Games and anti-cheat
 
-Games with kernel-level anti-cheat (Riot Vanguard, Easy Anti-Cheat, BattlEye and similar) block input that other programs inject, which can freeze the pointer. So Kinetic **steps aside completely** while a known protected game is in front: your remaps, DPI stages and acceleration are off, and the Dashboard shows **Paused for a game**. The mouse behaves as if Kinetic were not running.
+### Why Kinetic's engine cannot run in some games
 
-Built-in list: Valorant, League of Legends, Fortnite, Apex Legends, Elden Ring, Destiny 2, Battlefield, Call of Duty, Rainbow Six Siege, PUBG, Escape from Tarkov, Fall Guys, THE FINALS, Marvel Rivals, Deadlock and DayZ. A fallback also releases the mouse if Kinetic ever sees its own injected input being dropped, and tries again when you switch windows.
+Kinetic's engine changes mouse input like this: it catches the real movement or button press, then sends a changed version with the Windows `SendInput` function. Games with kernel-level anti-cheat (Riot Vanguard, Easy Anti-Cheat, BattlEye and similar) refuse input that another program injects. When that happens to movement, the real movement has already been swallowed, so the pointer freezes. You can see this in the [activity log](#the-activity-log): Windows reports every injected move as refused.
 
-Anti-cheat can flag input tools that merely run. If you play competitively, the safest choice is to quit Kinetic from the tray before launching the game.
+This is not specific to Kinetic. Every software remapper (AutoHotkey, X-Mouse Button Control and similar) has the same problem in these games. Vendor software such as Razer Synapse or Logitech G Hub works there because it writes its settings into the mouse's own memory, so nothing is running between the mouse and the game.
 
-Two switches in Settings change this behaviour:
+### What Kinetic does about it
 
-- **Pause for games with anti-cheat** (on by default). Turn it off to run Kinetic in those games anyway, at your own risk.
-- **Release the mouse when input is blocked** (on by default). If Windows refuses the input Kinetic sends, Kinetic steps aside so the pointer keeps working. **Ctrl+Alt+Shift+P** pauses or resumes Kinetic at any time, even if the pointer is stuck.
+There are three ways to get settings into a protected game, and Kinetic uses them in this order:
 
-The **Activity log** (Settings, off by default) records what Kinetic did and whether Windows accepted it, so you can check what really happened in a game. It never records key names or typed text. In the example below (sample entries from the demo mode), Windows accepted the first batch of movement but then dropped the next 640 moves, so Kinetic stepped aside because input was blocked.
+1. **Kernel mode** (optional). The [Raw Accel](#kernel-mode-raw-accel-in-detail) driver processes the movement inside the mouse's driver stack, where there is no injected input to refuse. It covers DPI scaling, acceleration, rotation, angle snapping and smoothing, not remaps or macros.
+2. **Stepping aside.** While a known protected game is in front, Kinetic's own engine does nothing at all: remaps, DPI stages and acceleration are off, and the Dashboard shows **Paused for a game**. The mouse behaves as if Kinetic's engine were not running. Built-in list: Valorant, League of Legends, Fortnite, Apex Legends, Elden Ring, Destiny 2, Battlefield, Call of Duty, Rainbow Six Siege, PUBG, Escape from Tarkov, Fall Guys, THE FINALS, Marvel Rivals, Deadlock and DayZ.
+3. **A fallback.** If Kinetic ever sees its own injected movement being dropped, it releases the mouse (**Paused: input blocked**) so the pointer keeps working, and tries again after 20 seconds or when you switch windows.
+
+Features stored on the mouse (DPI stages, polling rate, simple button remaps) also work in these games, but Kinetic can only set them for brands whose protocol it knows.
+
+Anti-cheat can flag input tools that merely run. If you play competitively and want no risk at all, quit Kinetic from the tray before launching the game.
+
+### The switches
+
+- **Pause for games with anti-cheat** (Settings, on by default). Turn it off to let Kinetic's engine run in those games anyway, at your own risk of a freeze or a flag.
+- **Release the mouse when input is blocked** (Settings, on by default). Turn it off and the pointer freezes if input is refused, instead of Kinetic stepping aside.
+- **Emergency hotkey: Ctrl+Alt+Shift+P** pauses or resumes Kinetic's engine at any time, even when the pointer is stuck. Pausing hands the mouse back to Windows.
+
+### The activity log
+
+The **Activity log** (Settings, off by default) records what Kinetic did and whether Windows accepted it, so you can check what really happened in a game. It never records key names or typed text. It writes to `%APPDATA%\Kinetic\activity.log` and shows recent entries in Settings.
 
 ![Activity log with sample entries](docs/screenshots/settings-activity-log.png)
 
-### Kernel mode (Raw Accel)
+In the example above (sample entries from the demo mode), Windows accepted the first batch of movement but then dropped the next 640 moves, so Kinetic stepped aside because input was blocked. "Arrived" means the movement came back through Windows. The log cannot see inside the game itself, so a run of ✓ is a good sign, not proof.
 
-Anti-cheat blocks Kinetic's own movement processing, but it accepts [Raw Accel](https://github.com/RawAccelOfficial/rawaccel), a separate Microsoft-signed mouse driver (MIT licence). In **Settings → Kernel mode** Kinetic can install Raw Accel and hand it the movement work:
+## Kernel mode (Raw Accel) in detail
 
-- **Carried over:** DPI target as sensitivity, acceleration curves, rotation, angle snapping, smoothing and the separate Y scale.
-- **Not carried over:** button remaps and macros, which still need input Kinetic injects itself.
+### What Raw Accel is
+
+[Raw Accel](https://github.com/RawAccelOfficial/rawaccel) is a separate, open-source (MIT licence) Windows driver by other authors. It is a *filter driver*: a small piece of kernel code that sits in the mouse's own driver stack and changes each movement packet on its way from the mouse to Windows. It was made for acceleration curves, and it also does rotation, angle snapping, smoothing and per-axis sensitivity.
+
+Its driver file, `rawaccel.sys`, is signed by Microsoft (the signature's publisher is *Microsoft Windows Hardware Compatibility Publisher*), which is what lets Windows load it. The project's FAQ says it is safe for anti-cheat to see, because it only applies a fixed set of formulas and waits one second after every settings change so it cannot be used to cheat in real time. The FAQ lists Valorant, FaceIT and Diabotical as places it has worked. That is the project's claim, not a promise from any anti-cheat vendor.
+
+### Why it works where Kinetic's engine does not
+
+![Angle snapping at app level versus in the Raw Accel driver](docs/kernel-mode.svg)
+
+- **Kinetic's engine** sits above the game, in a normal program. To change movement it must swallow the real one and send a new one, and anti-cheat refuses that new one.
+- **Raw Accel** changes the movement *before* it becomes Windows input, inside the driver stack. Nothing is swallowed and nothing is injected. The game and its anti-cheat receive an ordinary stream of mouse movement that happens to have been scaled, curved or snapped on the way.
+
+In kernel mode Kinetic's engine does no movement processing at all. It only translates your settings and hands them to the driver.
+
+### What carries over
+
+| Kinetic setting | What Kinetic sends to Raw Accel |
+|---|---|
+| DPI stage (target) and the mouse's real DPI | **Output DPI** = 1000 × target ÷ real DPI. At 800 target on a 1600 DPI mouse that is 500, which halves movement |
+| Separate Y DPI and the vertical ratio | **Y/X output ratio** = (Y target ÷ X target) × vertical ratio |
+| Acceleration (any mode, either Sensitivity or Gain) | A **lookup table** of 129 points of (speed in counts per ms, multiplier), sampled from Kinetic's finished curve over 0 to 32 counts/ms. Because the finished curve is sampled, every mode, the gain form and the speed cap keep the shape you see on the Acceleration screen |
+| Curve per axis | **By component** mode instead of whole-vector mode |
+| Rotation | **Degrees of rotation**, same value and direction |
+| Angle snapping | **Degrees of angle snapping**, fixed at 6° (Kinetic's own window) |
+| Smoothing | **Output smoothing half-life** in ms, worked out as ln 0.5 ÷ ln(smoothing) at 1 ms per event (the same figure the slider shows) |
+| Raw 1:1 movement | Windows' own pointer acceleration is switched off while kernel mode processes movement, as in Kinetic's own mode |
+
+When nothing needs processing, or you pause Kinetic, Kinetic sends a neutral setting (no acceleration, no scaling).
+
+### What does not carry over
+
+- **Button remaps, macros, Shift layers, DPI-stage hotkeys.** They need injected input, which anti-cheat still refuses. In a protected game the engine steps aside for them (if that switch is on), while the driver keeps processing movement.
+- **Raw Accel's other options** that Kinetic has no control for: input speed cap, left/right and up/down sensitivity split, per-device DPI normalisation, polling-rate lock. Kinetic leaves them off.
+- **Exact feel.** The curve is the same shape, but Raw Accel computes things in its own order (it rotates before accelerating, Kinetic accelerates then rotates) and smooths in its own way, so the feel can differ slightly from Kinetic's own processing. If it does, adjust smoothing first.
+
+### How the settings reach the driver
+
+1. Kinetic works out the settings above and writes them as a Raw Accel settings file in `%APPDATA%\Kinetic\rawaccel`.
+2. It runs Raw Accel's own `writer.exe` on that file. The writer checks the settings against the driver's rules and passes them to the driver through its control device (`\\.\rawaccel`).
+3. The driver takes the new settings about a second after the write. Kinetic waits at least 1.3 seconds between writes and sends only the latest request, so changing a slider quickly sends one write, not many.
+4. The driver does **not** remember settings. They are gone after a restart, so Kinetic applies them every time it starts.
+
+Kinetic sets the driver back to neutral when you switch kernel mode off, pause the engine, or quit it from the tray.
+
+### Turn it on
+
 ![Settings: kernel mode before Raw Accel is installed](docs/screenshots/settings-kernel-mode.png)
 
-To turn it on:
-
-1. Open **Settings → Kernel mode (Raw Accel)** and press **Install Raw Accel**. Kinetic downloads the official release, checks it against a fixed checksum and runs its installer.
-2. Windows asks for administrator approval. Choose **Yes**. A black installer window then opens: it should say *Install complete, change will take effect after restart*. Press any key to close it. If it prints an error instead, see Troubleshooting.
+1. Open **Settings → Kernel mode (Raw Accel)** and press **Install Raw Accel**. Kinetic downloads the official Raw Accel 1.7.1 release (about 1.5 MB) from GitHub and checks it against a fixed SHA-256 checksum. It refuses to continue if the checksum does not match.
+2. Kinetic runs Raw Accel's installer. Windows asks for administrator approval. Choose **Yes**. A black installer window opens and should say *Install complete, change will take effect after restart*. Press any key to close it. If it prints an error instead, see [Troubleshooting](#troubleshooting).
 3. **Restart the PC.** The driver only loads after a restart.
 4. Open Settings again. The status line should say *Raw Accel is installed*. Switch **Kernel mode** on. It then says *Active*.
 5. Set DPI, acceleration, rotation, angle snapping and smoothing on the Performance and Acceleration screens as usual. Kinetic passes them to the driver.
 
-To remove it, press **Uninstall** in the same card, approve the prompt, and restart.
-- **Behaviour:** settings reach the driver about a second and a half after you change them. The driver forgets them on reboot, so Kinetic applies them again at every start, and sets them back to neutral when it quits.
+What the installer does, in plain terms (from Raw Accel's source): it copies `rawaccel.sys` into `C:\Windows\System32\drivers`, registers it as a driver service, and adds it to the mouse class driver list so it sits between the mouse and Windows. Windows loads it at the next start. Kinetic also keeps a copy of the Raw Accel files (its installer, writer and licence) in `%APPDATA%\Kinetic\rawaccel`.
 
-Whether a game's anti-cheat accepts Raw Accel is up to the anti-cheat. Raw Accel's own FAQ says it works in Valorant, FaceIT and Diabotical, but that is not a guarantee.
+### Turn it off or remove it
+
+- **Switch kernel mode off** in Settings: Kinetic sets the driver neutral and its engine processes movement itself again. The driver stays installed but does nothing.
+- **Uninstall**, in the same card: runs Raw Accel's uninstaller (approve the prompt), then restart.
+
+### Things to know
+
+- **If you also use Raw Accel on its own** (its own app or settings file), turn kernel mode off. Kinetic writes the whole settings file, so while kernel mode is on it replaces whatever Raw Accel was set to.
+- **If Kinetic crashes** or is ended without quitting from the tray, the driver keeps its last settings until you restart Kinetic, switch kernel mode off and on, or restart Windows.
+- **Windows security features:** the driver is Microsoft-signed, which is what Windows needs to load it. Some PCs have extra driver-blocking policies (for example strict memory-integrity settings) that can still refuse a third-party driver. If Windows blocks it, Kinetic cannot change that.
+- **Updates:** Kinetic pins Raw Accel 1.7.1. A newer Raw Accel release is not used until a Kinetic release updates the pinned version and checksum.
+- **Tested** by the author on Windows 11 with one mouse: the settings were read back from the driver to confirm they arrived, and it was reported working in Valorant. Other PCs and games may differ.
 
 ## What works on which mouse
 
-- **Any mouse:** everything in the "Any mouse" column above. It uses Windows' own mouse input, so it needs no driver.
+- **Any mouse:** everything in the "Any mouse" column above. It uses Windows' own mouse input, so it needs no driver. Kernel mode also works with any mouse, because Raw Accel acts on every mouse's movement.
 - **Razer mice:** real DPI, polling rate (125, 500, 1000 Hz) and battery, read and set over the mouse's own HID protocol. Developed and tested on a single model, so other Razer models may behave differently. Please [report them](#requesting-support-for-your-mouse).
 - **Other brands:** no live DPI or polling control yet. Use [Measure and Calibrate](#dpi-on-any-mouse-measure-and-calibrate), and request support so a protocol can be added.
 
@@ -272,10 +364,10 @@ If your mouse is not fully supported, Kinetic can send the details a maintainer 
 
 | Problem | What to do |
 |---|---|
-| The pointer freezes in a game | Update to 0.1.1 or later. If it still happens, quit Kinetic from the tray before playing and [open an issue](https://github.com/jamimmehdi/kinetic/issues) with the game name |
+| The pointer freezes in a game | Keep **Pause for games with anti-cheat** and **Release the mouse when input is blocked** switched on, or use [kernel mode](#kernel-mode-raw-accel-in-detail). Ctrl+Alt+Shift+P pauses Kinetic if the pointer is stuck. If it still happens, quit Kinetic from the tray before playing and [open an issue](https://github.com/jamimmehdi/kinetic/issues) with the game name |
 | *"Engine not running"* | Wait a few seconds, it restarts itself. If it stays, quit Kinetic from the tray and start it again |
 | A button does nothing when remapped | Check you are editing the profile that is active, and that the engine is not paused. The left button cannot be remapped |
-| Remaps do not work in a game | Expected for protected games, see [Games and anti-cheat](#games-and-anti-cheat) |
+| Remaps do not work in a game | Expected for protected games, because the game refuses the input. See [Games and anti-cheat](#games-and-anti-cheat) |
 | An extra button is not detected | Settings → **Run again** under First-launch setup, or Buttons → **Press a button to detect** |
 | Wrong DPI shown on a non-Razer mouse | Press the DPI button, or Settings → **Calibrate** again |
 | SmartScreen warns on install | The installer is unsigned. Choose **More info → Run anyway** |
@@ -284,8 +376,19 @@ If your mouse is not fully supported, Kinetic can send the details a maintainer 
 | Kernel mode says *Raw Accel reported a problem* or *writer.exe refused the settings* | Switch kernel mode off and on. If it repeats, open an issue with the exact message |
 | The pointer feels different in kernel mode | Raw Accel applies the curve its own way, so the feel can differ slightly from Kinetic's own processing. Turn smoothing down first, or switch kernel mode off |
 | Acceleration stays on after quitting Kinetic | Quit it from the tray (not by ending the process), so it can set the driver back to neutral. Switching kernel mode off also does this |
+| My own Raw Accel settings were replaced | Kinetic writes the whole settings file while kernel mode is on. Turn kernel mode off to use Raw Accel on its own |
 
-Your settings live in `%APPDATA%\Kinetic\config.json`. Pointer settings Kinetic changes (such as scroll lines) are restored when it quits, and on the next start after a crash.
+## Where Kinetic keeps its files
+
+| Path | What it holds |
+|---|---|
+| `%APPDATA%\Kinetic\config.json` | Your profiles, mappings, macros, DPI stages and learned buttons |
+| `%APPDATA%\kinetic-app\settings.json` | App switches: start with Windows, tray, updates, game pause, failsafe, kernel mode, activity log |
+| `%APPDATA%\Kinetic\activity.log` | The activity log, if switched on (older entries move to `activity.old.log`) |
+| `%APPDATA%\Kinetic\rawaccel\` | The Raw Accel installer, writer, licence and the settings file Kinetic last wrote |
+| `C:\Windows\System32\drivers\rawaccel.sys` | The Raw Accel driver, only if you installed it |
+
+Pointer settings Kinetic changes (such as scroll lines) are restored when it quits, and on the next start after a crash.
 
 ## Build from source
 
@@ -304,7 +407,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173` in a plain browser to work on the interface without the engine. A mock engine answers: keys `1` to `7` act as mouse buttons and holding `M` fakes movement.
+Open `http://localhost:5173` in a plain browser to work on the interface without the engine. A mock engine answers: keys `1` to `7` act as mouse buttons and holding `M` fakes movement. Add `?nohw` to the address to pretend the mouse has no vendor protocol.
 
 Package the installer:
 
@@ -327,16 +430,16 @@ npm run typecheck
 npm run test:parity
 ```
 
-`cargo test` runs the engine's unit tests. `test:parity` checks that the interface's acceleration curves match the engine's. `tests/e2e` drives a real engine with injected input; see [tests/e2e/README.md](tests/e2e/README.md).
+`cargo test` runs the engine's unit tests, including the ones that check the Raw Accel settings Kinetic generates. `test:parity` checks that the interface's acceleration curves match the engine's. `tests/e2e` drives a real engine with injected input; see [tests/e2e/README.md](tests/e2e/README.md).
 
-To regenerate the screenshots in this README, run `npx vite --port 5173 --host 127.0.0.1` in `app`, then `electron scripts/shoot-docs.js` with `SHOOT_OUT` set to `docs/screenshots`.
+To regenerate the screenshots in this README, run `npx vite --port 5173 --host 127.0.0.1` in `app`, then run `electron scripts/shoot-docs.js` and `electron scripts/shoot-kernel.js` with `SHOOT_OUT` set to `docs/screenshots`.
 
 ## How it works
 
 Two programs that talk over a named pipe (`\\.\pipe\kinetic-engine`, one JSON object per line):
 
-- **`engine/`** (Rust): everything time-critical lives here so a busy or closed interface can never make the mouse stutter. It reads devices with Raw Input, hooks mouse input with a low-level hook to remap buttons and the wheel, moves the pointer with `SendInput` for DPI, acceleration and smoothing, runs macros, watches the foreground app for profiles, and talks to Razer mice over HID.
-- **`app/`** (Electron, React, TypeScript): the interface, tray icon, start-with-Windows, and installer. It starts the engine and reconnects if it stops.
+- **`engine/`** (Rust): everything time-critical lives here so a busy or closed interface can never make the mouse stutter. It reads devices with Raw Input, hooks mouse input with a low-level hook to remap buttons and the wheel, moves the pointer with `SendInput` for DPI, acceleration and smoothing, runs macros, watches the foreground app for profiles, talks to Razer mice over HID, and (in kernel mode) drives the Raw Accel driver. The kernel mode code is `engine/src/kernel.rs`.
+- **`app/`** (Electron, React, TypeScript): the interface, tray icon, start-with-Windows, installer, the in-app updater, and the guided Raw Accel install. It starts the engine and reconnects if it stops.
 
 Safety rules built in:
 
@@ -344,7 +447,9 @@ Safety rules built in:
 - Movement is only swallowed after the first raw movement has been seen, so a failure cannot leave you with a dead pointer.
 - Pointer settings Windows owns are changed for the session only and restored on exit.
 - Input the engine injects itself is ignored by its own hook, so a remap can never trigger itself.
-- The engine steps aside for protected games and if its input is blocked.
+- The engine steps aside for protected games and if its input is blocked, and Ctrl+Alt+Shift+P pauses it from the keyboard.
+- Downloads are limited to one pinned address, checked against a fixed checksum, and the app never runs an installer without Windows' own approval prompt.
+- The activity log never records key names or typed text.
 
 ## Contributing and releasing
 
@@ -358,6 +463,10 @@ To publish a release:
 
 The repository an installed app reads updates from is set under `kinetic.updates` in `app/package.json`, and where the support button opens issues under `kinetic.repo`.
 
-## License
+To move to a newer Raw Accel, change the version, address and SHA-256 in `app/electron/main.ts` (`RAW_ACCEL`) and the version in `engine/src/kernel.rs`, then check the settings still pass its validation.
 
-MIT. See [LICENSE](LICENSE).
+## Credits and licence
+
+Kinetic is MIT licensed. See [LICENSE](LICENSE).
+
+Kernel mode uses [Raw Accel](https://github.com/RawAccelOfficial/rawaccel) by its authors (MIT licence), which Kinetic downloads from the official release and does not modify. Kinetic is not affiliated with the Raw Accel project.

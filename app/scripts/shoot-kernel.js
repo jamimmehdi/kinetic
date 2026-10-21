@@ -19,8 +19,16 @@ app.whenReady().then(async () => {
     await run(`localStorage.setItem("kinetic.mock.setupDone", "1"); localStorage.setItem("kinetic.theme", "dark");`);
     await win.webContents.reload();
     await sleep(1000);
+    // Performance with the smoothing readout in milliseconds.
+    await run(`document.querySelector('[aria-label="Performance"]').click()`);
+    await sleep(500);
+    fs.writeFileSync(path.join(out, "performance.png"), (await win.webContents.capturePage()).toPNG());
+    log("shot performance");
     await run(`document.querySelector('[aria-label="Settings"]').click()`);
     await sleep(500);
+    // The top of Settings, before anything is scrolled or switched on.
+    fs.writeFileSync(path.join(out, "settings.png"), (await win.webContents.capturePage()).toPNG());
+    log("shot settings");
     // The activity log needs to be on to show its list.
     await run(`document.querySelector('[aria-label="Record activity"]').click()`);
     await sleep(700);
