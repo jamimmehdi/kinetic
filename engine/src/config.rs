@@ -233,7 +233,7 @@ impl Perf {
         self.active_stage = moved[self.active_stage.min(moved.len() - 1)];
         self.rotation = finite(self.rotation, 0.0).clamp(-180.0, 180.0);
         self.y_ratio = finite(self.y_ratio, 1.0).clamp(0.25, 4.0);
-        self.smoothing = finite(self.smoothing, 0.0).clamp(0.0, 0.95);
+        self.smoothing = finite(self.smoothing, 0.0).clamp(0.0, 0.98);
         self.scroll.lines = self.scroll.lines.clamp(1, 100);
 
         let a = &mut self.accel;
@@ -764,7 +764,7 @@ mod tests {
         assert!(perf.active_stage < perf.stages.len());
         assert_eq!(perf.rotation, 0.0);
         assert_eq!(perf.y_ratio, 4.0);
-        assert_eq!(perf.smoothing, 0.95);
+        assert_eq!(perf.smoothing, 0.98);
         assert_eq!(perf.scroll.lines, 1);
         assert_eq!(perf.accel.limit, 2.5);
         assert!(perf.accel.points.len() >= 2);

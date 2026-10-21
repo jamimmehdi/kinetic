@@ -28,7 +28,7 @@ static CONFIG_STAGE: AtomicUsize = AtomicUsize::new(usize::MAX);
 /// Angle, in degrees, within which a stroke is snapped onto an axis.
 const SNAP_DEGREES: f32 = 6.0;
 /// Hardest smoothing the processor applies, whatever the setting says.
-const MAX_SMOOTHING: f32 = 0.8;
+const MAX_SMOOTHING: f32 = 0.98;
 
 /// A DPI the user set on the mouse itself (its own DPI button) that the stage list does not describe.
 static EXTERNAL: Mutex<Option<(u32, u32)>> = Mutex::new(None);

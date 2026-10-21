@@ -195,7 +195,13 @@ export function PerformanceScreen({ engine, profileId, onProfileChange }: Props)
           <div className="row plain"><span>Angle snapping</span><Toggle label="Angle snapping" on={perf.angle_snap} onChange={(v) => update((p) => ({ ...p, angle_snap: v }))} /></div>
           <div className="row plain">
             <span>Smoothing</span>
-            <Slider label="Smoothing" width={120} min={0} max={0.8} step={0.05} value={perf.smoothing} onChange={(v) => update((p) => ({ ...p, smoothing: v }))} />
+            <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {/* Half of a sudden move is still held back after this long, at a 1000 Hz mouse. */}
+              <span className="sub num" style={{ fontSize: 12, minWidth: 52, textAlign: "right" }} title="How long smoothing takes to catch up halfway">
+                {perf.smoothing > 0.001 ? `≈ ${(Math.log(0.5) / Math.log(perf.smoothing)).toFixed(1)} ms` : "off"}
+              </span>
+              <Slider label="Smoothing" width={120} min={0} max={0.98} step={0.01} value={perf.smoothing} onChange={(v) => update((p) => ({ ...p, smoothing: v }))} />
+            </span>
           </div>
         </div>
 
