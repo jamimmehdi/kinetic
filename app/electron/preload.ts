@@ -19,6 +19,16 @@ contextBridge.exposeInMainWorld("kinetic", {
   send(message: unknown) {
     ipcRenderer.send("engine:send", message);
   },
+  kernel: {
+    install: (): Promise<void> => ipcRenderer.invoke("kernel:install"),
+    uninstall: (): Promise<void> => ipcRenderer.invoke("kernel:uninstall"),
+    getInstall: (): Promise<unknown> => ipcRenderer.invoke("kernel:getInstall"),
+    onInstall(cb: (state: unknown) => void): Unsubscribe {
+      const handler = (_e: unknown, state: unknown) => cb(state);
+      ipcRenderer.on("kernel:install", handler);
+      return () => ipcRenderer.removeListener("kernel:install", handler);
+    },
+  },
   showLog(): Promise<void> {
     return ipcRenderer.invoke("app:showLog");
   },

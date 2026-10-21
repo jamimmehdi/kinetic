@@ -4,7 +4,7 @@
 //! polling for incoming commands. Two threads on one synchronous pipe handle would deadlock,
 //! because a pending read blocks writes on the same handle.
 
-use crate::{bus, config, foreground, input, learn, macros, measure, movement, razer, report, state};
+use crate::{bus, config, foreground, input, kernel, learn, macros, measure, movement, razer, report, state};
 use serde_json::{json, Value};
 use std::ffi::c_void;
 use std::fs::File;
@@ -141,6 +141,7 @@ fn handle_command(text: &str) {
             bus::publish(&state::layer_event());
             bus::publish(&movement::dpi_event());
             bus::publish(&razer::hardware_event());
+            bus::publish(&kernel::status_event());
         }
         Some("get_config") => bus::publish(&json!({ "t": "config", "config": config::current() })),
         Some("set_config") => {
@@ -164,6 +165,7 @@ fn handle_command(text: &str) {
         // The tray's Quit item: put the pointer settings back and stop.
         Some("quit") => {
             razer::restore_blocking();
+            kernel::restore_blocking();
             crate::spi::restore_all();
             std::process::exit(0);
         }
@@ -179,6 +181,8 @@ fn handle_command(text: &str) {
             }
         }
         Some("set_game_guard") => state::set_guard(cmd.get("enabled").and_then(Value::as_bool).unwrap_or(true)),
+        Some("set_kernel_mode") => kernel::set_enabled(cmd.get("enabled").and_then(Value::as_bool).unwrap_or(false)),
+        Some("kernel_refresh") => kernel::refresh(),
         Some("set_failsafe") => state::set_failsafe(cmd.get("enabled").and_then(Value::as_bool).unwrap_or(true)),
         Some("set_activity_log") => crate::activity::set_enabled(cmd.get("enabled").and_then(Value::as_bool).unwrap_or(false)),
         Some("activity_history") => bus::publish(&crate::activity::history()),

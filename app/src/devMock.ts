@@ -25,7 +25,7 @@ export function installDevMock() {
   let moving = false;
   let pollingHz = 1000;
   let settings: AppSettings = {
-    startWithWindows: false, minimizeToTray: true, autoUpdate: true, gameGuard: true, activityLog: false, blockedFailsafe: true,
+    startWithWindows: false, minimizeToTray: true, autoUpdate: true, gameGuard: true, activityLog: false, blockedFailsafe: true, kernelMode: false,
     setupDone: (() => { try { return localStorage.getItem(setupDoneKey) === "1"; } catch { return false; } })(),
   };
   let candidates: LearnCandidate[] = [];
@@ -110,6 +110,9 @@ export function installDevMock() {
           if (!multi) setTimeout(() => emit({ t: "learn", state: "found", button: 7 }), 1500);
           break;
         }
+        case "kernel_refresh":
+          emit({ t: "kernel", enabled: settings.kernelMode, driver: false, writer: false, active: false, error: null });
+          break;
         case "activity_history":
           emit({
             t: "activity_history", enabled: true,

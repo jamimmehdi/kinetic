@@ -10,6 +10,7 @@ mod config;
 mod foreground;
 mod hook;
 mod input;
+mod kernel;
 mod keys;
 mod learn;
 mod macros;
@@ -70,6 +71,7 @@ fn main() {
     macros::start();
     scroll::start();
     razer::start();
+    kernel::start();
     movement::start_telemetry();
     std::thread::spawn(pipe::serve);
 

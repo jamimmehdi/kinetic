@@ -233,7 +233,33 @@ export type EngineMessage =
   | ({ t: "measure" } & MeasureState)
   | ({ t: "report" } & DeviceReport)
   | { t: "activity"; entry: ActivityEntry }
-  | { t: "activity_history"; entries: ActivityEntry[]; enabled: boolean };
+  | { t: "activity_history"; entries: ActivityEntry[]; enabled: boolean }
+  | ({ t: "kernel" } & KernelStatus);
+
+/** The Raw Accel driver bridge: is it wanted, is it installed, is it doing the movement work. */
+export interface KernelStatus {
+  enabled: boolean;
+  /** The driver is loaded in Windows. */
+  driver: boolean;
+  /** Raw Accel's writer program is on this PC (the app downloads it). */
+  writer: boolean;
+  /** Kernel mode is on and working: the driver is doing the movement processing. */
+  active: boolean;
+  error: string | null;
+}
+
+export type KernelInstall =
+  | { state: "idle" }
+  | { state: "downloading" | "verifying" | "extracting" | "installing" | "removing" }
+  | { state: "done"; restart: boolean }
+  | { state: "error"; message: string };
+
+export interface KernelBridge {
+  install(): Promise<void>;
+  uninstall(): Promise<void>;
+  getInstall(): Promise<KernelInstall>;
+  onInstall(cb: (s: KernelInstall) => void): () => void;
+}
 
 /** What the engine can see about the connected mice, for a support request. */
 export interface DeviceReport {
@@ -273,6 +299,7 @@ export interface KineticBridge {
   pickFile?(): Promise<string | null>;
   getVersion?(): Promise<string>;
   showLog?(): Promise<void>;
+  kernel?: KernelBridge;
   openIssue?(title: string, body: string): Promise<{ opened: boolean; truncated?: boolean; reason?: string }>;
   updates?: UpdatesBridge;
   getAppSettings?(): Promise<AppSettings>;
@@ -287,6 +314,7 @@ export interface AppSettings {
   gameGuard: boolean;
   activityLog: boolean;
   blockedFailsafe: boolean;
+  kernelMode: boolean;
 }
 
 /** One line of the activity log. `detail` never holds key names. */
@@ -355,6 +383,8 @@ export interface EngineState {
   report: DeviceReport | null;
   /** Recent activity log entries, oldest first. Empty unless the log is switched on. */
   activity: ActivityEntry[];
+  kernel: KernelStatus | null;
+  requestKernel(): void;
   requestActivity(): void;
   clearActivity(): void;
   requestReport(): void;
@@ -400,6 +430,7 @@ export function useEngine(): EngineState {
   const [lastButton, setLastButton] = useState<ButtonEvent | null>(null);
   const [report, setReport] = useState<DeviceReport | null>(null);
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
+  const [kernel, setKernel] = useState<KernelStatus | null>(null);
   const bridge = useRef(window.kinetic);
 
   useEffect(() => {
@@ -461,6 +492,12 @@ export function useEngine(): EngineState {
           void _t;
           setTelemetry(info);
           setSpeedHistory((prev) => [...prev.slice(1 - HISTORY), info.speed]);
+          break;
+        }
+        case "kernel": {
+          const { t: _t, ...status } = m;
+          void _t;
+          setKernel(status);
           break;
         }
         case "activity":
@@ -526,7 +563,8 @@ export function useEngine(): EngineState {
 
   return {
     connected, version, paused, game, asideReason, devices, config, activeProfile, activeApp, shiftActive, dpi, hardware, telemetry,
-    speedHistory, apps, runningMacros, pressed, lastPressed, learn, candidates, measure, lastButton, report, activity, setConfig,
+    speedHistory, apps, runningMacros, pressed, lastPressed, learn, candidates, measure, lastButton, report, activity, kernel, setConfig,
+    requestKernel: useCallback(() => send({ cmd: "kernel_refresh" }), [send]),
     requestActivity: useCallback(() => send({ cmd: "activity_history" }), [send]),
     clearActivity: useCallback(() => send({ cmd: "activity_clear" }), [send]),
     requestReport: useCallback(() => send({ cmd: "device_report" }), [send]),

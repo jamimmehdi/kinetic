@@ -1,8 +1,11 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, shell, Tray } from "electron";
 import { autoUpdater } from "electron-updater";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
+import https from "node:https";
 import net from "node:net";
+import os from "node:os";
 import path from "node:path";
 
 /** Named pipe the Rust engine listens on. Messages are one JSON object per line. */
@@ -24,9 +27,11 @@ interface AppSettings {
   activityLog: boolean;
   /** Release the mouse when Windows refuses the input Kinetic sends. */
   blockedFailsafe: boolean;
+  /** Let the Raw Accel driver do movement processing (works where injected input is refused). */
+  kernelMode: boolean;
 }
 
-const DEFAULT_SETTINGS: AppSettings = { startWithWindows: false, minimizeToTray: true, autoUpdate: true, setupDone: false, gameGuard: true, activityLog: false, blockedFailsafe: true };
+const DEFAULT_SETTINGS: AppSettings = { startWithWindows: false, minimizeToTray: true, autoUpdate: true, setupDone: false, gameGuard: true, activityLog: false, blockedFailsafe: true, kernelMode: false };
 
 let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -53,6 +58,7 @@ function loadSettings(): AppSettings {
       gameGuard: parsed.gameGuard !== false,
       activityLog: parsed.activityLog === true,
       blockedFailsafe: parsed.blockedFailsafe !== false,
+      kernelMode: parsed.kernelMode === true,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -116,6 +122,7 @@ function connectToEngine() {
     send({ cmd: "set_game_guard", enabled: settings.gameGuard });
     send({ cmd: "set_activity_log", enabled: settings.activityLog });
     send({ cmd: "set_failsafe", enabled: settings.blockedFailsafe });
+    send({ cmd: "set_kernel_mode", enabled: settings.kernelMode });
     send({ cmd: "snapshot" });
   });
 
@@ -243,7 +250,9 @@ ipcMain.handle("app:setSettings", (_e, patch: Partial<AppSettings>) => {
     gameGuard: pick("gameGuard"),
     activityLog: pick("activityLog"),
     blockedFailsafe: pick("blockedFailsafe"),
+    kernelMode: pick("kernelMode"),
   };
+  send({ cmd: "set_kernel_mode", enabled: settings.kernelMode });
   saveSettings();
   send({ cmd: "set_game_guard", enabled: settings.gameGuard });
   send({ cmd: "set_activity_log", enabled: settings.activityLog });
@@ -251,6 +260,131 @@ ipcMain.handle("app:setSettings", (_e, patch: Partial<AppSettings>) => {
   applyLoginItem();
   return settings;
 });
+// ---- Raw Accel (kernel mode) -----------------------------------------------------------------------
+// Raw Accel is a separate, MIT-licensed, Microsoft-signed mouse driver (github.com/RawAccelOfficial/rawaccel).
+// The app downloads the official release, checks it against a pinned hash and runs its own installer,
+// which asks Windows for administrator approval and needs a restart. Nothing here is silent.
+
+const RAW_ACCEL = {
+  version: "1.7.1",
+  url: "https://github.com/RawAccelOfficial/rawaccel/releases/download/v1.7.1/RawAccel_v1.7.1.zip",
+  sha256: "770fe3ae0919ca3c4d412f58c985eb27f5434decad809f7e8206de4e8852eec4",
+};
+
+type KernelInstall =
+  | { state: "idle" }
+  | { state: "downloading" | "verifying" | "extracting" | "installing" | "removing" }
+  | { state: "done"; restart: boolean }
+  | { state: "error"; message: string };
+
+let kernelInstall: KernelInstall = { state: "idle" };
+const setKernelInstall = (s: KernelInstall) => {
+  kernelInstall = s;
+  toRenderer("kernel:install", s);
+};
+
+function rawAccelDir() {
+  return path.join(app.getPath("appData"), "Kinetic", "rawaccel");
+}
+
+/** Downloads `url` to `dest`, following the redirects GitHub uses, and returns the file's SHA-256. */
+function download(url: string, dest: string, redirects = 5): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+    if (u.protocol !== "https:") return reject(new Error("only https downloads are allowed"));
+    https
+      .get(u, (res) => {
+        if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          res.resume();
+          if (redirects <= 0) return reject(new Error("too many redirects"));
+          return resolve(download(new URL(res.headers.location, u).toString(), dest, redirects - 1));
+        }
+        if (res.statusCode !== 200) {
+          res.resume();
+          return reject(new Error(`download failed (HTTP ${res.statusCode})`));
+        }
+        const hash = crypto.createHash("sha256");
+        const out = fs.createWriteStream(dest);
+        res.on("data", (c) => hash.update(c));
+        res.pipe(out);
+        out.on("finish", () => out.close(() => resolve(hash.digest("hex"))));
+        out.on("error", reject);
+        res.on("error", reject);
+      })
+      .on("error", reject);
+  });
+}
+
+/** Runs a PowerShell snippet. Paths travel in environment variables, never in the command text. */
+function powershell(script: string, env: Record<string, string>): Promise<void> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+      { env: { ...process.env, ...env }, windowsHide: true, timeout: 10 * 60 * 1000 },
+      (err, _stdout, stderr) => (err ? reject(new Error((stderr || err.message).toString().trim().slice(0, 300))) : resolve()),
+    );
+  });
+}
+
+/** Runs one of Raw Accel's own programs with administrator rights. Windows shows its approval prompt. */
+function runElevated(exe: string, cwd: string): Promise<void> {
+  return powershell(
+    "$p = Start-Process -FilePath $env:KEXE -WorkingDirectory $env:KCWD -Verb RunAs -Wait -PassThru; exit $p.ExitCode",
+    { KEXE: exe, KCWD: cwd },
+  );
+}
+
+async function installRawAccel() {
+  if (["downloading", "verifying", "extracting", "installing", "removing"].includes(kernelInstall.state)) return;
+  const tmp = path.join(os.tmpdir(), "KineticRawAccel");
+  const zip = path.join(tmp, `RawAccel_v${RAW_ACCEL.version}.zip`);
+  const staging = path.join(tmp, "x");
+  try {
+    fs.rmSync(tmp, { recursive: true, force: true });
+    fs.mkdirSync(tmp, { recursive: true });
+    setKernelInstall({ state: "downloading" });
+    const digest = await download(RAW_ACCEL.url, zip);
+    setKernelInstall({ state: "verifying" });
+    if (digest !== RAW_ACCEL.sha256) throw new Error("the downloaded file does not match the expected checksum, so it was not used");
+    setKernelInstall({ state: "extracting" });
+    await powershell("Expand-Archive -LiteralPath $env:KZIP -DestinationPath $env:KDEST -Force", { KZIP: zip, KDEST: staging });
+    const src = path.join(staging, "RawAccel");
+    const dest = rawAccelDir();
+    fs.mkdirSync(dest, { recursive: true });
+    fs.cpSync(src, dest, { recursive: true, force: true });
+    for (const f of ["installer.exe", "writer.exe", "wrapper.dll", "Newtonsoft.Json.dll", path.join("driver", "rawaccel.sys")]) {
+      if (!fs.existsSync(path.join(dest, f))) throw new Error(`the download is missing ${f}`);
+    }
+    setKernelInstall({ state: "installing" });
+    await runElevated(path.join(dest, "installer.exe"), dest);
+    setKernelInstall({ state: "done", restart: true });
+  } catch (e) {
+    setKernelInstall({ state: "error", message: e instanceof Error ? e.message : String(e) });
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+    send({ cmd: "kernel_refresh" });
+  }
+}
+
+async function uninstallRawAccel() {
+  const exe = path.join(rawAccelDir(), "uninstaller.exe");
+  if (!fs.existsSync(exe)) return setKernelInstall({ state: "error", message: "the Raw Accel uninstaller is not on this PC" });
+  try {
+    setKernelInstall({ state: "removing" });
+    await runElevated(exe, rawAccelDir());
+    setKernelInstall({ state: "done", restart: true });
+  } catch (e) {
+    setKernelInstall({ state: "error", message: e instanceof Error ? e.message : String(e) });
+  } finally {
+    send({ cmd: "kernel_refresh" });
+  }
+}
+
+ipcMain.handle("kernel:install", () => void installRawAccel());
+ipcMain.handle("kernel:uninstall", () => void uninstallRawAccel());
+ipcMain.handle("kernel:getInstall", () => kernelInstall);
+
 // Shows the activity log file in Explorer (or its folder if nothing was logged yet).
 ipcMain.handle("app:showLog", () => {
   const file = path.join(app.getPath("appData"), "Kinetic", "activity.log");

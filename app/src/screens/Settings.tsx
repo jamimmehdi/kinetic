@@ -1,6 +1,6 @@
 import { useContext, useEffect, useState } from "react";
 import { ThemeContext, Toggle, Top } from "../ui";
-import type { ActivityEntry, AppSettings, EngineState, UpdateStatus } from "../engine";
+import type { ActivityEntry, AppSettings, EngineState, KernelInstall, UpdateStatus } from "../engine";
 
 const ANY = [
   ["Global button remapping", "Low-level hooks, works in every app"],
@@ -57,6 +57,70 @@ export function describeActivity(e: ActivityEntry): { text: string; worked: bool
     default:
       return { text: String(d.state ?? ""), worked: null };
   }
+}
+
+/** Kernel mode: the Raw Accel driver does the movement work, which anti-cheat games accept. */
+function KernelCard({ engine, on, disabled, onToggle }: { engine: EngineState; on: boolean; disabled: boolean; onToggle(v: boolean): void }) {
+  const { kernel } = engine;
+  const [install, setInstall] = useState<KernelInstall>({ state: "idle" });
+  const bridge = window.kinetic?.kernel;
+  useEffect(() => {
+    engine.requestKernel();
+    bridge?.getInstall().then(setInstall).catch(() => {});
+    return bridge?.onInstall((s) => {
+      setInstall(s);
+      engine.requestKernel();
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const busy = ["downloading", "verifying", "extracting", "installing", "removing"].includes(install.state);
+  const installed = !!kernel?.driver;
+  const ready = installed && !!kernel?.writer;
+  const progress: Record<string, string> = {
+    downloading: "Downloading Raw Accel from GitHub…",
+    verifying: "Checking the download…",
+    extracting: "Unpacking…",
+    installing: "Waiting for you to approve the installer in Windows…",
+    removing: "Waiting for you to approve the uninstaller in Windows…",
+  };
+
+  let status = "";
+  if (busy) status = progress[install.state];
+  else if (install.state === "error") status = `Could not finish: ${install.message}`;
+  else if (install.state === "done") status = "Done. Restart your PC for the change to take effect.";
+  else if (kernel?.active) status = "Active. Raw Accel is doing the movement processing.";
+  else if (kernel?.error) status = `Raw Accel reported a problem: ${kernel.error}`;
+  else if (ready) status = on ? "Waiting for the first settings to be applied." : "Raw Accel is installed. Switch kernel mode on to use it.";
+  else if (installed) status = "The driver is installed but its helper files are missing. Install again.";
+  else status = "Raw Accel is not installed on this PC.";
+
+  return (
+    <div className="card" style={{ padding: "6px 22px", flex: "none" }}>
+      <div className="row plain">
+        <span>
+          Kernel mode (Raw Accel)
+          <span className="sub" style={{ display: "block", fontSize: 12 }}>
+            Moves pointer processing (DPI scaling, acceleration, rotation, angle snapping, smoothing) into Raw Accel, a Microsoft-signed mouse driver.
+            It keeps working in games whose anti-cheat refuses input from normal programs. Button remaps and macros still do not.
+          </span>
+        </span>
+        <Toggle label="Kernel mode" on={on} disabled={disabled || !ready} onChange={onToggle} />
+      </div>
+      <div className="row plain" style={{ borderTop: "1px solid var(--bd)" }}>
+        <span className="sub" style={{ fontSize: 13 }} role="status">{status}</span>
+        <span style={{ display: "flex", gap: 10 }}>
+          {!installed && <button type="button" className="btn2" disabled={busy || !bridge} onClick={() => bridge?.install()}>Install Raw Accel</button>}
+          {installed && <button type="button" className="btn2" disabled={busy || !bridge} onClick={() => bridge?.uninstall()}>Uninstall</button>}
+        </span>
+      </div>
+      {!installed && !busy && (
+        <div className="sub" style={{ fontSize: 12, padding: "0 0 12px" }}>
+          Installing downloads the official Raw Accel {"1.7.1"} release from GitHub, checks it against a fixed checksum, and runs its installer.
+          Windows asks for administrator approval and you need to restart afterwards. Raw Accel is a separate project (MIT licence).
+        </div>
+      )}
+    </div>
+  );
 }
 
 function ActivityCard({ engine, on, disabled, onToggle }: { engine: EngineState; on: boolean; disabled: boolean; onToggle(v: boolean): void }) {
@@ -220,6 +284,8 @@ export function SettingsScreen({ engine, onRunSetup, onCalibrate, onRequestSuppo
           <button type="button" className="btn2" onClick={onRequestSupport}>Request support</button>
         </div>
       </div>
+
+      <KernelCard engine={engine} on={!!app?.kernelMode} disabled={!app} onToggle={(v) => { void change({ kernelMode: v }); }} />
 
       <ActivityCard engine={engine} on={!!app?.activityLog} disabled={!app} onToggle={(v) => { void change({ activityLog: v }); window.setTimeout(() => engine.requestActivity(), 300); }} />
 

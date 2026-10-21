@@ -169,7 +169,10 @@ pub fn apply_config() {
         razer::request_dpi(target.0, target.1);
     }
     let native = native_dpi(&perf);
-    let want = perf.needs_movement_for(target, native) && !paused;
+    // In kernel mode the Raw Accel driver does the movement work, so the engine does none of it.
+    let kernel = crate::kernel::active();
+    let wants_processing = perf.needs_movement_for(target, native);
+    let want = wants_processing && !paused && !kernel;
 
     if let Ok(mut p) = PROCESSOR.lock() {
         *p = if want { Some(Processor::build(&perf, target, native)) } else { None };
@@ -179,7 +182,10 @@ pub fn apply_config() {
         // Wait for a fresh raw movement before swallowing anything.
         SWALLOW.store(false, Ordering::Relaxed);
     }
-    spi::set_accel_off(want && perf.raw_movement);
+    spi::set_accel_off((want || (kernel && wants_processing && !state::user_paused())) && perf.raw_movement);
+    // The driver follows the user's pause; the engine's own pauses (a game in front, blocked input)
+    // only concern the input the engine itself injects.
+    crate::kernel::sync(&perf, target, native, state::user_paused());
     spi::set_scroll_lines(if state::paused() { None } else { Some(perf.scroll.lines) });
     bus::publish(&dpi_event());
 }

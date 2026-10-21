@@ -26,6 +26,11 @@ pub fn paused() -> bool {
     PAUSED.load(Ordering::Relaxed) || ASIDE.load(Ordering::Relaxed) != 0
 }
 
+/// True when the user paused the engine themselves (not a game or blocked input).
+pub fn user_paused() -> bool {
+    PAUSED.load(Ordering::Relaxed)
+}
+
 pub fn aside_reason() -> Option<&'static str> {
     match ASIDE.load(Ordering::Relaxed) {
         GAME => Some("game"),
