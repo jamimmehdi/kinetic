@@ -2,29 +2,56 @@
 
 use crate::bus;
 use serde_json::json;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering};
+use std::time::Duration;
 
 static PAUSED: AtomicBool = AtomicBool::new(false);
-/// A game with kernel-level anti-cheat is in front. The engine steps aside completely there.
-static GAME: AtomicBool = AtomicBool::new(false);
+/// Why the engine stepped aside on its own: 0 not, 1 a protected game is in front, 2 injected input
+/// was being dropped.
+static ASIDE: AtomicU8 = AtomicU8::new(0);
+const GAME: u8 = 1;
+const BLOCKED: u8 = 2;
+/// After input was blocked, try again this long later even if the user stays in the same window.
+const RETRY_AFTER: Duration = Duration::from_secs(20);
 /// Number of Shift-layer buttons currently held.
 static SHIFT_HELD: AtomicU32 = AtomicU32::new(0);
 
 /// True when the engine must leave input alone: paused by the user, or a protected game is in front.
 pub fn paused() -> bool {
-    PAUSED.load(Ordering::Relaxed) || GAME.load(Ordering::Relaxed)
+    PAUSED.load(Ordering::Relaxed) || ASIDE.load(Ordering::Relaxed) != 0
 }
 
-pub fn game_active() -> bool {
-    GAME.load(Ordering::Relaxed)
+pub fn aside_reason() -> Option<&'static str> {
+    match ASIDE.load(Ordering::Relaxed) {
+        GAME => Some("game"),
+        BLOCKED => Some("blocked"),
+        _ => None,
+    }
 }
 
-/// A protected game came to the front or left it.
+/// A protected game came to the front or left it. Leaving also ends a "blocked" step-aside, so
+/// switching windows is a retry.
 pub fn set_game(on: bool) {
-    if GAME.swap(on, Ordering::Relaxed) == on {
+    set_aside(if on { GAME } else { 0 });
+}
+
+/// Injected input is being dropped (anti-cheat driver or similar). Step aside, and retry later.
+pub fn set_blocked() {
+    set_aside(BLOCKED);
+    std::thread::spawn(|| {
+        std::thread::sleep(RETRY_AFTER);
+        if ASIDE.load(Ordering::Relaxed) == BLOCKED {
+            set_aside(0);
+        }
+    });
+}
+
+fn set_aside(reason: u8) {
+    let was = ASIDE.swap(reason, Ordering::Relaxed);
+    if was == reason {
         return;
     }
-    if on {
+    if reason != 0 {
         SHIFT_HELD.store(0, Ordering::Relaxed);
         crate::macros::stop_all();
     }
@@ -61,7 +88,7 @@ pub fn shift_button(down: bool) {
 }
 
 pub fn event() -> serde_json::Value {
-    json!({ "t": "engine", "paused": paused(), "game": game_active() })
+    json!({ "t": "engine", "paused": paused(), "game": aside_reason().is_some(), "reason": aside_reason() })
 }
 
 pub fn layer_event() -> serde_json::Value {

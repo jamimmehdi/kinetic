@@ -342,7 +342,7 @@ pub fn on_raw(m: RawMove) {
             // Injection is being dropped. Step aside so the physical mouse works again; the engine
             // tries again when another window comes to the front.
             SENT_UNSEEN.store(0, Ordering::Relaxed);
-            state::set_game(true);
+            state::set_blocked();
             return;
         }
     }

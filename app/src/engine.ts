@@ -227,7 +227,7 @@ export type EngineMessage =
   | ({ t: "dpi" } & DpiInfo)
   | ({ t: "hardware" } & HardwareInfo)
   | { t: "layer"; shift: boolean }
-  | { t: "engine"; paused: boolean; game?: boolean }
+  | { t: "engine"; paused: boolean; game?: boolean; reason?: "game" | "blocked" | null }
   | ({ t: "learn" } & LearnState)
   | { t: "learn"; state: "candidates"; items: LearnCandidate[] }
   | ({ t: "measure" } & MeasureState)
@@ -314,6 +314,8 @@ export interface EngineState {
   paused: boolean;
   /** The engine has stepped aside because a game with anti-cheat is in front (or input was blocked). */
   game: boolean;
+  /** Why the engine stepped aside: a protected game in front, or injected input being blocked. */
+  asideReason: "game" | "blocked" | null;
   devices: DeviceInfo[];
   config: EngineConfig;
   /** Profile the engine is using right now, chosen by the app in front. */
@@ -360,6 +362,7 @@ export function useEngine(): EngineState {
   const [version, setVersion] = useState<string | null>(null);
   const [paused, setPausedState] = useState(false);
   const [game, setGame] = useState(false);
+  const [asideReason, setAsideReason] = useState<"game" | "blocked" | null>(null);
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
   const [config, setConfigState] = useState<EngineConfig>(EMPTY_CONFIG);
   const [activeProfile, setActiveProfile] = useState(DEFAULT_PROFILE);
@@ -420,6 +423,7 @@ export function useEngine(): EngineState {
         case "engine":
           setPausedState(m.paused);
           setGame(!!m.game);
+          setAsideReason(m.reason ?? (m.game ? "game" : null));
           break;
         case "dpi": {
           const { t: _t, ...info } = m;
@@ -496,7 +500,7 @@ export function useEngine(): EngineState {
   }, []);
 
   return {
-    connected, version, paused, game, devices, config, activeProfile, activeApp, shiftActive, dpi, hardware, telemetry,
+    connected, version, paused, game, asideReason, devices, config, activeProfile, activeApp, shiftActive, dpi, hardware, telemetry,
     speedHistory, apps, runningMacros, pressed, lastPressed, learn, candidates, measure, lastButton, report, setConfig,
     requestReport: useCallback(() => send({ cmd: "device_report" }), [send]),
     requestApps: useCallback(() => send({ cmd: "list_apps" }), [send]),

@@ -50,8 +50,8 @@ export function DashboardScreen({ engine }: { engine: EngineState }) {
           {engine.connected ? deviceLabel(device) : "Engine not running"}
         </Pill>
         <span className="pill">Profile · <b style={{ fontWeight: 600 }}>{active.name}</b></span>
-        <button className="btn" type="button" disabled={!engine.connected || engine.game} onClick={() => engine.setPaused(!engine.paused)}>
-          {engine.game ? "Paused for a game" : engine.paused ? "Resume engine" : "Pause engine"}
+        <button className="btn" type="button" title={engine.asideReason === "blocked" ? "Windows or another program is blocking the input Kinetic sends. It retries in a few seconds or when you switch windows." : engine.game ? "A game with anti-cheat is in front. Kinetic stays out of its way." : undefined} disabled={!engine.connected || engine.game} onClick={() => engine.setPaused(!engine.paused)}>
+          {engine.game ? (engine.asideReason === "blocked" ? "Paused: input blocked" : "Paused for a game") : engine.paused ? "Resume engine" : "Pause engine"}
         </button>
       </Top>
 
