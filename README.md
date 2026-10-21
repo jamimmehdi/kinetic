@@ -214,6 +214,24 @@ Built-in list: Valorant, League of Legends, Fortnite, Apex Legends, Elden Ring, 
 
 Anti-cheat can flag input tools that merely run. If you play competitively, the safest choice is to quit Kinetic from the tray before launching the game.
 
+Two switches in Settings change this behaviour:
+
+- **Pause for games with anti-cheat** (on by default). Turn it off to run Kinetic in those games anyway, at your own risk.
+- **Release the mouse when input is blocked** (on by default). If Windows refuses the input Kinetic sends, Kinetic steps aside so the pointer keeps working. **Ctrl+Alt+Shift+P** pauses or resumes Kinetic at any time, even if the pointer is stuck.
+
+The **Activity log** (Settings, off by default) records what Kinetic did and whether Windows accepted it, so you can check what really happened in a game. It never records key names or typed text.
+
+### Kernel mode (Raw Accel)
+
+Anti-cheat blocks Kinetic's own movement processing, but it accepts [Raw Accel](https://github.com/RawAccelOfficial/rawaccel), a separate Microsoft-signed mouse driver (MIT licence). In **Settings → Kernel mode** Kinetic can install Raw Accel and hand it the movement work:
+
+- **Carried over:** DPI target as sensitivity, acceleration curves, rotation, angle snapping, smoothing and the separate Y scale.
+- **Not carried over:** button remaps and macros, which still need input Kinetic injects itself.
+- **Install:** press **Install Raw Accel**. Kinetic downloads the official release, checks it against a fixed checksum and runs its installer. Windows asks for administrator approval, and the driver loads after you **restart**. Then switch kernel mode on.
+- **Behaviour:** settings reach the driver about a second and a half after you change them. The driver forgets them on reboot, so Kinetic applies them again at every start, and sets them back to neutral when it quits.
+
+Whether a game's anti-cheat accepts Raw Accel is up to the anti-cheat. Raw Accel's own FAQ says it works in Valorant, FaceIT and Diabotical, but that is not a guarantee.
+
 ## What works on which mouse
 
 - **Any mouse:** everything in the "Any mouse" column above. It uses Windows' own mouse input, so it needs no driver.
