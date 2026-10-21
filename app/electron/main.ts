@@ -329,10 +329,18 @@ function powershell(script: string, env: Record<string, string>): Promise<void> 
 
 /** Runs one of Raw Accel's own programs with administrator rights. Windows shows its approval prompt. */
 function runElevated(exe: string, cwd: string): Promise<void> {
+  // Raw Accel's installer finds the driver by a relative path, and an elevated start does not keep the
+  // working directory, so go through cmd to change into the folder first. Its window waits for a key
+  // press, which is how the user sees whether it worked.
   return powershell(
-    "$p = Start-Process -FilePath $env:KEXE -WorkingDirectory $env:KCWD -Verb RunAs -Wait -PassThru; exit $p.ExitCode",
+    "$a = '/c cd /d \"' + $env:KCWD + '\" && \"' + $env:KEXE + '\"'; $p = Start-Process -FilePath $env:ComSpec -ArgumentList $a -Verb RunAs -Wait -PassThru; exit $p.ExitCode",
     { KEXE: exe, KCWD: cwd },
   );
+}
+
+/** Where the installer puts the driver. Its presence is the proof that the install worked. */
+function installedDriverPath() {
+  return path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "drivers", "rawaccel.sys");
 }
 
 async function installRawAccel() {
@@ -358,6 +366,9 @@ async function installRawAccel() {
     }
     setKernelInstall({ state: "installing" });
     await runElevated(path.join(dest, "installer.exe"), dest);
+    if (!fs.existsSync(installedDriverPath())) {
+      throw new Error("the installer did not put the driver in Windows. If you saw its window, it says why; if no approval prompt appeared, try again");
+    }
     setKernelInstall({ state: "done", restart: true });
   } catch (e) {
     setKernelInstall({ state: "error", message: e instanceof Error ? e.message : String(e) });
@@ -373,7 +384,9 @@ async function uninstallRawAccel() {
   try {
     setKernelInstall({ state: "removing" });
     await runElevated(exe, rawAccelDir());
-    setKernelInstall({ state: "done", restart: true });
+    setKernelInstall(fs.existsSync(installedDriverPath())
+      ? { state: "error", message: "the driver is still in Windows. If you saw the uninstaller's window, it says why" }
+      : { state: "done", restart: true });
   } catch (e) {
     setKernelInstall({ state: "error", message: e instanceof Error ? e.message : String(e) });
   } finally {
