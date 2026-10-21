@@ -1,0 +1,12 @@
+node_modules/
+dist/
+dist-electron/
+release/
+target/
+target-check/
+*.log
+tests/e2e/out.txt
+tests/e2e/ready.txt
+tests/e2e/stop.txt
+.idea/
+.claude/
