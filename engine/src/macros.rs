@@ -110,6 +110,9 @@ fn launch(running: &mut HashMap<String, Running>, def: MacroDef, loops: Option<u
 
 /// Called from the mouse hook. Only queues a command, so it never blocks.
 pub fn trigger(id: &str, down: bool) {
+    if down {
+        crate::activity::record("macro", json!({ "id": id }));
+    }
     if let Some(tx) = TX.get() {
         let _ = tx.send(Cmd::Trigger { id: id.to_string(), down });
     }

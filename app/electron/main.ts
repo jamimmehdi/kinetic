@@ -20,9 +20,11 @@ interface AppSettings {
   setupDone: boolean;
   /** Step aside for games with kernel anti-cheat (Valorant and similar). */
   gameGuard: boolean;
+  /** Record what Kinetic does (and whether it worked) to a log file. */
+  activityLog: boolean;
 }
 
-const DEFAULT_SETTINGS: AppSettings = { startWithWindows: false, minimizeToTray: true, autoUpdate: true, setupDone: false, gameGuard: true };
+const DEFAULT_SETTINGS: AppSettings = { startWithWindows: false, minimizeToTray: true, autoUpdate: true, setupDone: false, gameGuard: true, activityLog: false };
 
 let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -47,6 +49,7 @@ function loadSettings(): AppSettings {
       autoUpdate: parsed.autoUpdate !== false,
       setupDone: parsed.setupDone === true,
       gameGuard: parsed.gameGuard !== false,
+      activityLog: parsed.activityLog === true,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -108,6 +111,7 @@ function connectToEngine() {
     connected = true;
     toRenderer("engine:status", { connected: true });
     send({ cmd: "set_game_guard", enabled: settings.gameGuard });
+    send({ cmd: "set_activity_log", enabled: settings.activityLog });
     send({ cmd: "snapshot" });
   });
 
@@ -233,11 +237,19 @@ ipcMain.handle("app:setSettings", (_e, patch: Partial<AppSettings>) => {
     autoUpdate: pick("autoUpdate"),
     setupDone: pick("setupDone"),
     gameGuard: pick("gameGuard"),
+    activityLog: pick("activityLog"),
   };
   saveSettings();
   send({ cmd: "set_game_guard", enabled: settings.gameGuard });
+  send({ cmd: "set_activity_log", enabled: settings.activityLog });
   applyLoginItem();
   return settings;
+});
+// Shows the activity log file in Explorer (or its folder if nothing was logged yet).
+ipcMain.handle("app:showLog", () => {
+  const file = path.join(app.getPath("appData"), "Kinetic", "activity.log");
+  if (fs.existsSync(file)) shell.showItemInFolder(file);
+  else void shell.openPath(path.dirname(file));
 });
 ipcMain.handle("app:pickFile", async () => {
   const options = { title: "Choose a program", properties: ["openFile" as const], filters: [{ name: "Programs", extensions: ["exe", "lnk", "bat", "cmd"] }, { name: "All files", extensions: ["*"] }] };

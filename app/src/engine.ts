@@ -231,7 +231,9 @@ export type EngineMessage =
   | ({ t: "learn" } & LearnState)
   | { t: "learn"; state: "candidates"; items: LearnCandidate[] }
   | ({ t: "measure" } & MeasureState)
-  | ({ t: "report" } & DeviceReport);
+  | ({ t: "report" } & DeviceReport)
+  | { t: "activity"; entry: ActivityEntry }
+  | { t: "activity_history"; entries: ActivityEntry[]; enabled: boolean };
 
 /** What the engine can see about the connected mice, for a support request. */
 export interface DeviceReport {
@@ -270,6 +272,7 @@ export interface KineticBridge {
   /** Desktop-only helpers. Missing in a plain browser. */
   pickFile?(): Promise<string | null>;
   getVersion?(): Promise<string>;
+  showLog?(): Promise<void>;
   openIssue?(title: string, body: string): Promise<{ opened: boolean; truncated?: boolean; reason?: string }>;
   updates?: UpdatesBridge;
   getAppSettings?(): Promise<AppSettings>;
@@ -282,6 +285,15 @@ export interface AppSettings {
   autoUpdate: boolean;
   setupDone: boolean;
   gameGuard: boolean;
+  activityLog: boolean;
+}
+
+/** One line of the activity log. `detail` never holds key names. */
+export interface ActivityEntry {
+  t: number;
+  app: string;
+  kind: string;
+  detail: Record<string, unknown>;
 }
 
 export type UpdateStatus =
@@ -340,6 +352,10 @@ export interface EngineState {
   measure: MeasureState;
   lastButton: ButtonEvent | null;
   report: DeviceReport | null;
+  /** Recent activity log entries, oldest first. Empty unless the log is switched on. */
+  activity: ActivityEntry[];
+  requestActivity(): void;
+  clearActivity(): void;
   requestReport(): void;
   setConfig(config: EngineConfig): void;
   requestApps(): void;
@@ -382,6 +398,7 @@ export function useEngine(): EngineState {
   const [measure, setMeasure] = useState<MeasureState>({ state: "idle" });
   const [lastButton, setLastButton] = useState<ButtonEvent | null>(null);
   const [report, setReport] = useState<DeviceReport | null>(null);
+  const [activity, setActivity] = useState<ActivityEntry[]>([]);
   const bridge = useRef(window.kinetic);
 
   useEffect(() => {
@@ -445,6 +462,12 @@ export function useEngine(): EngineState {
           setSpeedHistory((prev) => [...prev.slice(1 - HISTORY), info.speed]);
           break;
         }
+        case "activity":
+          setActivity((prev) => [...prev.slice(-299), m.entry]);
+          break;
+        case "activity_history":
+          setActivity(m.entries);
+          break;
         case "report": {
           const { t: _t, ...r } = m;
           void _t;
@@ -502,7 +525,9 @@ export function useEngine(): EngineState {
 
   return {
     connected, version, paused, game, asideReason, devices, config, activeProfile, activeApp, shiftActive, dpi, hardware, telemetry,
-    speedHistory, apps, runningMacros, pressed, lastPressed, learn, candidates, measure, lastButton, report, setConfig,
+    speedHistory, apps, runningMacros, pressed, lastPressed, learn, candidates, measure, lastButton, report, activity, setConfig,
+    requestActivity: useCallback(() => send({ cmd: "activity_history" }), [send]),
+    clearActivity: useCallback(() => send({ cmd: "activity_clear" }), [send]),
     requestReport: useCallback(() => send({ cmd: "device_report" }), [send]),
     requestApps: useCallback(() => send({ cmd: "list_apps" }), [send]),
     runMacro: useCallback((id: string) => send({ cmd: "run_macro", id }), [send]),

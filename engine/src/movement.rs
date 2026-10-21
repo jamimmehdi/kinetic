@@ -244,6 +244,7 @@ pub fn dpi_event() -> serde_json::Value {
 }
 
 pub fn set_stage(stage: usize) {
+    crate::activity::record("dpi", json!({ "stage": stage + 1 }));
     clear_external();
     let n = active_perf().stages.len();
     STAGE.store(stage.min(n.saturating_sub(1)), Ordering::Relaxed);
@@ -313,6 +314,7 @@ static SENT_UNSEEN: AtomicU32 = AtomicU32::new(0);
 const BLOCKED_AFTER: u32 = 60;
 
 pub fn note_injected_seen() {
+    crate::activity::move_seen();
     SENT_UNSEEN.store(0, Ordering::Relaxed);
 }
 
@@ -338,6 +340,7 @@ pub fn on_raw(m: RawMove) {
     let Some(((ix, iy), mult)) = out else { return };
     if ix != 0 || iy != 0 {
         hook::send(&[hook::move_input(ix, iy)]);
+        crate::activity::move_sent();
         if SENT_UNSEEN.fetch_add(1, Ordering::Relaxed) + 1 >= BLOCKED_AFTER && !hook::test_mode() {
             // Injection is being dropped. Step aside so the physical mouse works again; the engine
             // tries again when another window comes to the front.
@@ -389,6 +392,7 @@ pub fn start_telemetry() {
         let mut idle_sent = false;
         loop {
             std::thread::sleep(Duration::from_millis(100));
+            crate::activity::tick();
             let Ok(s) = STATS.lock() else { continue };
             let moving = s.last_event.is_some_and(|t| t.elapsed() < Duration::from_millis(400));
             if !moving && idle_sent {

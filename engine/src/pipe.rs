@@ -179,6 +179,9 @@ fn handle_command(text: &str) {
             }
         }
         Some("set_game_guard") => state::set_guard(cmd.get("enabled").and_then(Value::as_bool).unwrap_or(true)),
+        Some("set_activity_log") => crate::activity::set_enabled(cmd.get("enabled").and_then(Value::as_bool).unwrap_or(false)),
+        Some("activity_history") => bus::publish(&crate::activity::history()),
+        Some("activity_clear") => crate::activity::clear(),
         Some("device_report") => report::publish(),
         Some("measure_start") => measure::start(cmd.get("cm").and_then(Value::as_f64).unwrap_or(10.0)),
         Some("measure_finish") => measure::finish(),

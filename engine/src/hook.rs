@@ -113,6 +113,7 @@ pub(crate) fn handle(button: u8, down: bool) -> bool {
     if down {
         match config::action_for_active(button, state::shift_active()) {
             Some(a) => {
+                crate::activity::record("button", serde_json::json!({ "button": button, "action": crate::activity::action_kind(&a) }));
                 perform(&a, true);
                 *slot = Some(a);
                 true
@@ -173,7 +174,8 @@ pub(crate) fn send(inputs: &[INPUT]) {
         return;
     }
     unsafe {
-        SendInput(inputs, size_of::<INPUT>() as i32);
+        let accepted = SendInput(inputs, size_of::<INPUT>() as i32);
+        crate::activity::input_sent(inputs.len() as u32, accepted);
     }
 }
 

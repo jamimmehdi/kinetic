@@ -25,7 +25,7 @@ export function installDevMock() {
   let moving = false;
   let pollingHz = 1000;
   let settings: AppSettings = {
-    startWithWindows: false, minimizeToTray: true, autoUpdate: true, gameGuard: true,
+    startWithWindows: false, minimizeToTray: true, autoUpdate: true, gameGuard: true, activityLog: false,
     setupDone: (() => { try { return localStorage.getItem(setupDoneKey) === "1"; } catch { return false; } })(),
   };
   let candidates: LearnCandidate[] = [];
@@ -110,6 +110,19 @@ export function installDevMock() {
           if (!multi) setTimeout(() => emit({ t: "learn", state: "found", button: 7 }), 1500);
           break;
         }
+        case "activity_history":
+          emit({
+            t: "activity_history", enabled: true,
+            entries: [
+              { t: Date.now() - 6000, app: "valorant.exe", kind: "app", detail: { protected_game: true } },
+              { t: Date.now() - 5000, app: "valorant.exe", kind: "button", detail: { button: 4, action: "key" } },
+              { t: Date.now() - 4000, app: "valorant.exe", kind: "movement", detail: { sent: 812, delivered: 812, worked: true } },
+              { t: Date.now() - 3000, app: "valorant.exe", kind: "injected_input", detail: { accepted: 2, refused: 0, worked: true } },
+              { t: Date.now() - 2000, app: "valorant.exe", kind: "movement", detail: { sent: 640, delivered: 0, worked: false } },
+              { t: Date.now() - 1000, app: "valorant.exe", kind: "engine", detail: { stepped_aside: "blocked" } },
+            ],
+          });
+          break;
         case "device_report":
           emit({
             t: "report", engine: "0.1.0", windows: "Windows_NT",

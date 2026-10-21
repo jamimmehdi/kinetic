@@ -100,10 +100,16 @@ fn apply(hwnd: HWND) {
         return;
     }
     crate::state::set_game(is_protected_game(&exe));
+    let protected = is_protected_game(&exe);
     if let Ok(mut last) = LAST_APP.lock() {
         *last = exe;
     }
+    crate::activity::record("app", json!({ "protected_game": protected }));
     refresh();
+}
+
+pub fn last_app() -> String {
+    LAST_APP.lock().map(|l| l.clone()).unwrap_or_default()
 }
 
 /// Re-checks whether the app that was last in front is a protected game.

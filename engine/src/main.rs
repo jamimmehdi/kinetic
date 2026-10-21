@@ -4,6 +4,7 @@
 //! so a busy or closed UI can never make the system's mouse stutter.
 
 mod accel;
+mod activity;
 mod bus;
 mod config;
 mod foreground;

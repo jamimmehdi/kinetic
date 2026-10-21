@@ -1,6 +1,6 @@
 import { useContext, useEffect, useState } from "react";
 import { ThemeContext, Toggle, Top } from "../ui";
-import type { AppSettings, EngineState, UpdateStatus } from "../engine";
+import type { ActivityEntry, AppSettings, EngineState, UpdateStatus } from "../engine";
 
 const ANY = [
   ["Global button remapping", "Low-level hooks, works in every app"],
@@ -28,6 +28,82 @@ const NOT = [
   ["Software DPI above the sensor's native count", "Scaling up cannot add real detail"],
   ["Reading the sensor's true DPI", "Windows never reports it"],
 ];
+
+const KIND_LABEL: Record<string, string> = {
+  app: "App in front", button: "Button", movement: "Movement", injected_input: "Sent input", scroll: "Scroll",
+  dpi: "DPI stage", macro: "Macro", engine: "Engine", log: "Log",
+};
+
+/** One log line in plain words, with whether the thing worked (null when that is not a question). */
+export function describeActivity(e: ActivityEntry): { text: string; worked: boolean | null } {
+  const d = e.detail as Record<string, number | boolean | string | null>;
+  switch (e.kind) {
+    case "movement":
+      return { text: `${d.sent} moves sent, ${d.delivered} arrived`, worked: !!d.worked };
+    case "injected_input":
+      return { text: `${d.accepted} accepted, ${d.refused} refused by Windows`, worked: !!d.worked };
+    case "button":
+      return { text: `Button ${d.button} ran a ${d.action} action`, worked: null };
+    case "scroll":
+      return { text: `${d.notches} scroll notch(es) changed`, worked: null };
+    case "dpi":
+      return { text: `Stage ${d.stage}`, worked: null };
+    case "macro":
+      return { text: `Macro ${d.id}`, worked: null };
+    case "app":
+      return { text: d.protected_game ? "Protected game in front" : "Now in front", worked: null };
+    case "engine":
+      return { text: d.stepped_aside ? `Stepped aside (${d.stepped_aside === "blocked" ? "input blocked" : "game"})` : "Active again", worked: d.stepped_aside ? false : true };
+    default:
+      return { text: String(d.state ?? ""), worked: null };
+  }
+}
+
+function ActivityCard({ engine, on, disabled, onToggle }: { engine: EngineState; on: boolean; disabled: boolean; onToggle(v: boolean): void }) {
+  const { activity } = engine;
+  useEffect(() => { engine.requestActivity(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const shown = activity.slice(-100).reverse();
+  const checks = activity.filter((e) => describeActivity(e).worked !== null);
+  const good = checks.filter((e) => describeActivity(e).worked).length;
+  const fmt = (t: number) => new Date(t).toLocaleTimeString([], { hour12: false });
+
+  return (
+    <div className="card" style={{ padding: "6px 22px", flex: "none" }}>
+      <div className="row plain">
+        <span>Activity log<span className="sub" style={{ display: "block", fontSize: 12 }}>Records what Kinetic does and whether Windows accepted it, so you can see if your settings worked in a game. It never records key names or typed text.</span></span>
+        <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button type="button" className="btn2" onClick={() => window.kinetic?.showLog?.()} disabled={!window.kinetic?.showLog}>Show file</button>
+          <button type="button" className="btn2" onClick={() => engine.clearActivity()} disabled={activity.length === 0}>Clear</button>
+          <Toggle label="Record activity" on={on} disabled={disabled} onChange={onToggle} />
+        </span>
+      </div>
+      {on && (
+        <div style={{ borderTop: "1px solid var(--bd)", padding: "10px 0 14px" }}>
+          <div className="sub" style={{ fontSize: 12, marginBottom: 8 }} role="status">
+            {checks.length === 0 ? "Nothing to check yet. Use the mouse in your game, then come back." : `${good} of ${checks.length} checks worked.`}
+            {" "}"Arrived" means the movement came back through Windows. It cannot see inside the game itself.
+          </div>
+          <div style={{ maxHeight: 220, overflow: "auto", fontSize: 13 }} aria-label="Recent activity">
+            {shown.map((e, i) => {
+              const d = describeActivity(e);
+              return (
+                <div key={i} style={{ display: "flex", gap: 12, padding: "4px 0", borderBottom: "1px solid var(--bd)" }}>
+                  <span className="num sub" style={{ width: 64 }}>{fmt(e.t)}</span>
+                  <span className="sub" style={{ width: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.app || "–"}</span>
+                  <span style={{ width: 100 }}>{KIND_LABEL[e.kind] ?? e.kind}</span>
+                  <span style={{ flex: 1 }}>{d.text}</span>
+                  <span style={{ width: 70, textAlign: "right", color: d.worked === null ? "var(--mu)" : d.worked ? "var(--ok)" : "var(--wn)" }}>
+                    {d.worked === null ? "" : d.worked ? "✓ worked" : "✗ failed"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** Version, update status and the buttons that go with each state. */
 function UpdatesCard({ version, status, autoUpdate, onAuto }: { version: string; status: UpdateStatus; autoUpdate: boolean; onAuto(v: boolean): void }) {
@@ -140,6 +216,8 @@ export function SettingsScreen({ engine, onRunSetup, onCalibrate, onRequestSuppo
           <button type="button" className="btn2" onClick={onRequestSupport}>Request support</button>
         </div>
       </div>
+
+      <ActivityCard engine={engine} on={!!app?.activityLog} disabled={!app} onToggle={(v) => { void change({ activityLog: v }); window.setTimeout(() => engine.requestActivity(), 300); }} />
 
       <UpdatesCard version={version} status={upd} autoUpdate={!!app?.autoUpdate} onAuto={(v) => change({ autoUpdate: v })} />
 

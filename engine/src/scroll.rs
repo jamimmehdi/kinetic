@@ -52,6 +52,7 @@ pub fn handle(horizontal: bool, delta: i32) -> bool {
     if !s.reverse && !s.smooth {
         return false;
     }
+    crate::activity::wheel_handled();
     let delta = if s.reverse && !horizontal { -delta } else { delta };
     if s.smooth && !horizontal {
         if let Some(tx) = TX.get() {

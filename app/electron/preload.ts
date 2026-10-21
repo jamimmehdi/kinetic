@@ -19,6 +19,9 @@ contextBridge.exposeInMainWorld("kinetic", {
   send(message: unknown) {
     ipcRenderer.send("engine:send", message);
   },
+  showLog(): Promise<void> {
+    return ipcRenderer.invoke("app:showLog");
+  },
   openIssue(title: string, body: string): Promise<{ opened: boolean; truncated?: boolean; reason?: string }> {
     return ipcRenderer.invoke("app:openIssue", title, body);
   },

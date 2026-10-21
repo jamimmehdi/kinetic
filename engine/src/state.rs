@@ -71,6 +71,7 @@ fn set_aside(reason: u8) {
         SHIFT_HELD.store(0, Ordering::Relaxed);
         crate::macros::stop_all();
     }
+    crate::activity::record("engine", json!({ "stepped_aside": aside_reason() }));
     crate::movement::apply_config();
     bus::publish(&event());
     bus::publish(&layer_event());
