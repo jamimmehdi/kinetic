@@ -14,6 +14,7 @@ Kinetic is a small open-source alternative to vendor mouse software. It works wi
 - [Using Kinetic](#using-kinetic) (every screen)
 - [DPI on any mouse: measure and calibrate](#dpi-on-any-mouse-measure-and-calibrate)
 - [Games and anti-cheat](#games-and-anti-cheat)
+  - [Kernel mode (Raw Accel)](#kernel-mode-raw-accel)
 - [What works on which mouse](#what-works-on-which-mouse)
 - [Updates](#updates)
 - [Requesting support for your mouse](#requesting-support-for-your-mouse)
@@ -219,7 +220,9 @@ Two switches in Settings change this behaviour:
 - **Pause for games with anti-cheat** (on by default). Turn it off to run Kinetic in those games anyway, at your own risk.
 - **Release the mouse when input is blocked** (on by default). If Windows refuses the input Kinetic sends, Kinetic steps aside so the pointer keeps working. **Ctrl+Alt+Shift+P** pauses or resumes Kinetic at any time, even if the pointer is stuck.
 
-The **Activity log** (Settings, off by default) records what Kinetic did and whether Windows accepted it, so you can check what really happened in a game. It never records key names or typed text.
+The **Activity log** (Settings, off by default) records what Kinetic did and whether Windows accepted it, so you can check what really happened in a game. It never records key names or typed text. In the example below (sample entries from the demo mode), Windows accepted the first batch of movement but then dropped the next 640 moves, so Kinetic stepped aside because input was blocked.
+
+![Activity log with sample entries](docs/screenshots/settings-activity-log.png)
 
 ### Kernel mode (Raw Accel)
 
@@ -227,7 +230,17 @@ Anti-cheat blocks Kinetic's own movement processing, but it accepts [Raw Accel](
 
 - **Carried over:** DPI target as sensitivity, acceleration curves, rotation, angle snapping, smoothing and the separate Y scale.
 - **Not carried over:** button remaps and macros, which still need input Kinetic injects itself.
-- **Install:** press **Install Raw Accel**. Kinetic downloads the official release, checks it against a fixed checksum and runs its installer. Windows asks for administrator approval, and the driver loads after you **restart**. Then switch kernel mode on.
+![Settings: kernel mode before Raw Accel is installed](docs/screenshots/settings-kernel-mode.png)
+
+To turn it on:
+
+1. Open **Settings → Kernel mode (Raw Accel)** and press **Install Raw Accel**. Kinetic downloads the official release, checks it against a fixed checksum and runs its installer.
+2. Windows asks for administrator approval. Choose **Yes**. A black installer window then opens: it should say *Install complete, change will take effect after restart*. Press any key to close it. If it prints an error instead, see Troubleshooting.
+3. **Restart the PC.** The driver only loads after a restart.
+4. Open Settings again. The status line should say *Raw Accel is installed*. Switch **Kernel mode** on. It then says *Active*.
+5. Set DPI, acceleration, rotation, angle snapping and smoothing on the Performance and Acceleration screens as usual. Kinetic passes them to the driver.
+
+To remove it, press **Uninstall** in the same card, approve the prompt, and restart.
 - **Behaviour:** settings reach the driver about a second and a half after you change them. The driver forgets them on reboot, so Kinetic applies them again at every start, and sets them back to neutral when it quits.
 
 Whether a game's anti-cheat accepts Raw Accel is up to the anti-cheat. Raw Accel's own FAQ says it works in Valorant, FaceIT and Diabotical, but that is not a guarantee.
@@ -266,6 +279,11 @@ If your mouse is not fully supported, Kinetic can send the details a maintainer 
 | An extra button is not detected | Settings → **Run again** under First-launch setup, or Buttons → **Press a button to detect** |
 | Wrong DPI shown on a non-Razer mouse | Press the DPI button, or Settings → **Calibrate** again |
 | SmartScreen warns on install | The installer is unsigned. Choose **More info → Run anyway** |
+| **Install Raw Accel** shows an error, or says the installer did not put the driver in Windows | Press it again and approve the Windows prompt (it can open behind other windows). If the installer window shows an error, send it in an [issue](https://github.com/jamimmehdi/kinetic/issues) |
+| Kernel mode is greyed out | Raw Accel is not installed yet, or Windows has not been restarted since installing it. Restart, then reopen Settings |
+| Kernel mode says *Raw Accel reported a problem* or *writer.exe refused the settings* | Switch kernel mode off and on. If it repeats, open an issue with the exact message |
+| The pointer feels different in kernel mode | Raw Accel applies the curve its own way, so the feel can differ slightly from Kinetic's own processing. Turn smoothing down first, or switch kernel mode off |
+| Acceleration stays on after quitting Kinetic | Quit it from the tray (not by ending the process), so it can set the driver back to neutral. Switching kernel mode off also does this |
 
 Your settings live in `%APPDATA%\Kinetic\config.json`. Pointer settings Kinetic changes (such as scroll lines) are restored when it quits, and on the next start after a crash.
 
