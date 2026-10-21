@@ -215,7 +215,8 @@ fn accel_args(mode: &str, lut: Vec<f32>) -> Value {
         "Gain / Velocity": false,
         "inputOffset": 0.0,
         "outputOffset": 0.0,
-        "acceleration": 0.0,
+        // Raw Accel checks every parameter whatever the mode is, so unused ones still need valid values.
+        "acceleration": 0.005,
         "decayRate": 0.1,
         "gamma": 1.0,
         "motivity": 1.5,
@@ -326,6 +327,22 @@ mod tests {
 
     fn prof(v: &Value) -> &Value {
         &v["profiles"][0]
+    }
+
+    /// The driver's own validation rejects any file where one of these is not in range, in every mode.
+    #[test]
+    fn unused_parameters_stay_valid() {
+        for v in [neutral_settings(), build_settings(&perf(), (800, 800), 1600)] {
+            let a = &prof(&v)["Whole or horizontal accel parameters"];
+            for key in ["acceleration", "scale", "gamma", "decayRate", "exponentPower", "limit", "syncSpeed"] {
+                assert!(a[key].as_f64().unwrap() > 0.0, "{key} must be positive");
+            }
+            assert!(a["motivity"].as_f64().unwrap() > 1.0);
+            assert!(a["exponentClassic"].as_f64().unwrap() > 1.0);
+            let smooth = a["smooth"].as_f64().unwrap();
+            assert!((0.0..=1.0).contains(&smooth));
+            assert!(a["Cap / Jump"]["x"].as_f64().unwrap() > 0.0 && a["Cap / Jump"]["y"].as_f64().unwrap() > 0.0);
+        }
     }
 
     #[test]
