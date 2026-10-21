@@ -125,6 +125,72 @@ impl Default for Accel {
     }
 }
 
+/// Settings that steady a shaky or uneven hand. All of them only reshape the movement the mouse
+/// reports, using fixed formulas. None of them looks at the game.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct Steady {
+    /// Reduce sensitivity for very slow movement, where hand tremor lives.
+    pub precision: bool,
+    /// Speed (counts per ms) below which the reduction applies. Eases out to normal at this speed.
+    pub precision_below: f32,
+    /// Sensitivity at a standstill relative to normal, 0.1 to 1.
+    pub precision_factor: f32,
+    /// 0 to 0.95. Smooths the speed used for acceleration (not the pointer), so jittery speed does
+    /// not make the curve jitter.
+    pub speed_smoothing: f32,
+    /// Highest output speed in counts per ms. 0 means no limit.
+    pub speed_limit: f32,
+    /// Left sensitivity relative to right.
+    pub left_ratio: f32,
+    /// Up sensitivity relative to down.
+    pub up_ratio: f32,
+    /// Degrees from straight horizontal or vertical within which angle snapping straightens a move.
+    pub snap_degrees: f32,
+}
+
+impl Default for Steady {
+    fn default() -> Self {
+        Steady {
+            precision: false,
+            precision_below: 1.0,
+            precision_factor: 0.6,
+            // What the engine always used before this was a setting.
+            speed_smoothing: 0.6,
+            speed_limit: 0.0,
+            left_ratio: 1.0,
+            up_ratio: 1.0,
+            snap_degrees: 6.0,
+        }
+    }
+}
+
+impl Steady {
+    /// True when any of the settings that change the curve itself is on.
+    pub fn shapes_curve(&self) -> bool {
+        self.precision || self.speed_limit > 0.0
+    }
+
+    /// True when this changes movement compared with plain scaling (apart from the snap window,
+    /// which only matters while snapping is on).
+    pub fn changes_movement(&self) -> bool {
+        self.shapes_curve()
+            || (self.left_ratio - 1.0).abs() > 0.001
+            || (self.up_ratio - 1.0).abs() > 0.001
+    }
+
+    fn sanitize(&mut self) {
+        self.precision_below = finite(self.precision_below, 1.0).clamp(0.1, 16.0);
+        self.precision_factor = finite(self.precision_factor, 0.6).clamp(0.1, 1.0);
+        self.speed_smoothing = finite(self.speed_smoothing, 0.6).clamp(0.0, 0.95);
+        let limit = finite(self.speed_limit, 0.0);
+        self.speed_limit = if limit <= 0.0 { 0.0 } else { limit.clamp(2.0, 64.0) };
+        self.left_ratio = finite(self.left_ratio, 1.0).clamp(0.25, 4.0);
+        self.up_ratio = finite(self.up_ratio, 1.0).clamp(0.25, 4.0);
+        self.snap_degrees = finite(self.snap_degrees, 6.0).clamp(1.0, 45.0);
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Scroll {
     /// Lines per wheel notch, applied through the Windows setting while this profile is active.
@@ -160,6 +226,8 @@ pub struct Perf {
     pub scroll: Scroll,
     /// With a supported mouse, set the mouse's own DPI to the stage instead of scaling in software.
     pub use_hardware: bool,
+    /// Settings for a shaky or uneven hand.
+    pub steady: Steady,
 }
 
 impl Default for Perf {
@@ -178,6 +246,7 @@ impl Default for Perf {
             raw_movement: true,
             scroll: Scroll::default(),
             use_hardware: true,
+            steady: Steady::default(),
         }
     }
 }
@@ -208,6 +277,7 @@ impl Perf {
             || (self.y_ratio - 1.0).abs() > 0.001
             || self.angle_snap
             || self.smoothing > 0.001
+            || self.steady.changes_movement()
     }
 
     /// Clamps every value, keeps the stages in ascending DPI order and returns where each old stage
@@ -235,6 +305,7 @@ impl Perf {
         self.y_ratio = finite(self.y_ratio, 1.0).clamp(0.25, 4.0);
         self.smoothing = finite(self.smoothing, 0.0).clamp(0.0, 0.98);
         self.scroll.lines = self.scroll.lines.clamp(1, 100);
+        self.steady.sanitize();
 
         let a = &mut self.accel;
         a.rate = finite(a.rate, 0.8).clamp(0.0, 20.0);

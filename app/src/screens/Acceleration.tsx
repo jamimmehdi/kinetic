@@ -100,7 +100,7 @@ export function AccelerationScreen({ engine, profileId, onProfileChange }: Props
   const updatePerf = (change: (p: typeof perf) => typeof perf) =>
     engine.setConfig(withProfile(config, profile.id, (p) => ({ ...p, perf: change(p.perf) })));
 
-  const curve = useMemo(() => buildCurve(accel), [accel]);
+  const curve = useMemo(() => buildCurve(accel, perf.steady), [accel, perf.steady]);
   const samples = useMemo(() => Array.from({ length: 161 }, (_, i) => curve.multiplier((i / 160) * V_AXIS)), [curve]);
   const peak = Math.max(...samples, accel.mode === "custom" ? Math.max(...accel.points.map((p) => p[1])) : 0);
 

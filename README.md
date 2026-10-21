@@ -35,6 +35,7 @@ Kinetic is a small open-source alternative to vendor mouse software. It works wi
 | Profiles that switch automatically when an app comes to the front | ✅ | |
 | DPI stages (software scaling), separate X and Y | ✅ | |
 | Acceleration curves, rotation, angle snapping, smoothing, 1:1 raw movement | ✅ | |
+| Steady-hand settings for a shaky or uneven hand: precision zone, speed limit, hand bias, adjustable snapping, and a hold-still test that suggests them | ✅ | |
 | Scroll: lines per notch, smooth scrolling, reverse direction | ✅ | |
 | Measured polling rate (read only) | ✅ | |
 | Find all the buttons on your mouse, including hidden extra ones | ✅ | |
@@ -49,7 +50,7 @@ Things no software can do, because the mouse's sensor does not expose them: lift
 
 | Feature | Kinetic's own engine | Kernel mode (Raw Accel) | Stored on the mouse |
 |---|:---:|:---:|:---:|
-| DPI scaling, acceleration, rotation, angle snapping, smoothing | ❌ blocked | ✅ | |
+| DPI scaling, acceleration, rotation, angle snapping, smoothing, steady-hand settings | ❌ blocked | ✅ | |
 | Button remaps, macros, Shift layer | ❌ blocked | ❌ not covered | |
 | DPI stages, polling rate, simple button remaps | | | ✅ (needs the brand's protocol) |
 
@@ -88,7 +89,7 @@ If a button gives a signal Kinetic has not seen before, it asks you to name it (
 
 ## Using Kinetic
 
-Kinetic has seven screens, reached from the rail on the left. The sun/moon button at the top right switches between the dark and light theme.
+Kinetic has eight screens, reached from the rail on the left. The sun/moon button at the top right switches between the dark and light theme.
 
 ### Dashboard
 
@@ -158,6 +159,32 @@ Choose how hand speed turns into pointer speed. The graph is the curve; the numb
 - **Direction:** rotation, vertical ratio, and **curve per axis** for separate horizontal and vertical curves.
 
 The curve math is the same in the interface and the engine, and a test checks that they agree. In kernel mode the finished curve is sent to the driver as a table of points, so it keeps the same shape.
+
+### Steady hand
+
+Settings that calm a shaky or uneven hand. They only reshape the movement your own mouse reports, using fixed formulas, and never look at the game. They apply to the profile selected at the top, work on any mouse, and (in [kernel mode](#kernel-mode-raw-accel-in-detail)) in games with anti-cheat.
+
+![Steady hand](docs/screenshots/steady-hand.png)
+
+- **Precision zone.** Very slow movement, where tremor lives, is made less sensitive. Below the chosen speed, sensitivity eases down to a set share of normal at a standstill, and back to normal at that speed. The graph shows the resulting curve. Deliberate movement above the speed is left alone.
+- **Speed smoothing.** Smooths the speed that acceleration uses, so a jittery speed does not make the curve jitter. It does not delay the pointer, unlike the pointer smoothing on Performance.
+- **Speed limit.** Caps how fast the pointer can move per millisecond, so a sudden jerk cannot throw the pointer. Movement below the limit is unchanged. It works with or without an acceleration curve.
+- **Hand bias.** Scales left and up against right and down, for hands that move better in some directions.
+- **Angle snapping.** Straightens a move that is nearly horizontal or vertical. The **snap window** sets how many degrees from straight still counts (1° to 45°).
+- **Presets.** **Off**, **Light**, **Medium** and **Strong** fill in the precision zone and speed smoothing for you. Pick the one that matches, or use the test below.
+
+#### Test my hand
+
+Press **Test my hand** to have Kinetic measure your tremor instead of guessing.
+
+![Hold-still test: start](docs/screenshots/steady-test-1-start.png)
+![Hold-still test: result](docs/screenshots/steady-test-3-result.png)
+
+1. Rest your hand on the mouse the way you do when you play and keep it as still as you can for 10 seconds. Do not click or move on purpose.
+2. Kinetic records the tiny movements the sensor still reports. It removes slow drift (a hand that creeps is not trembling) and measures what is left: how big the shaking is in millimetres at the sensor, its main rhythm in hertz, and how fast it moves.
+3. It then sorts the result into **none**, **light**, **medium** or **strong** and suggests a precision zone and speed smoothing to match. **Apply the suggestion** copies them into your profile. You can still change every value by hand.
+
+Only mouse movement is measured. Nothing is saved or sent, and the recording stops when you close the dialog. The suggestion deliberately leaves pointer smoothing alone, because delay costs more aim than it gains. The measurements are only as good as the test, so repeat it if the result looks off.
 
 ### Macros
 
@@ -291,7 +318,10 @@ In kernel mode Kinetic's engine does no movement processing at all. It only tran
 | Acceleration (any mode, either Sensitivity or Gain) | A **lookup table** of 129 points of (speed in counts per ms, multiplier), sampled from Kinetic's finished curve over 0 to 32 counts/ms. Because the finished curve is sampled, every mode, the gain form and the speed cap keep the shape you see on the Acceleration screen |
 | Curve per axis | **By component** mode instead of whole-vector mode |
 | Rotation | **Degrees of rotation**, same value and direction |
-| Angle snapping | **Degrees of angle snapping**, fixed at 6° (Kinetic's own window) |
+| Angle snapping | **Degrees of angle snapping**, using your snap window (1° to 45°) |
+| Precision zone and speed limit | Baked into the same lookup table as the curve, so they work even with no acceleration mode chosen |
+| Speed smoothing | **Input speed smoothing half-life** in ms, worked out the same way as the pointer smoothing figure |
+| Hand bias | **Left** and **up** sensitivity multipliers (the driver's left/right and up/down ratios) |
 | Smoothing | **Output smoothing half-life** in ms, worked out as ln 0.5 ÷ ln(smoothing) at 1 ms per event (the same figure the slider shows) |
 | Raw 1:1 movement | Windows' own pointer acceleration is switched off while kernel mode processes movement, as in Kinetic's own mode |
 
@@ -300,7 +330,7 @@ When nothing needs processing, or you pause Kinetic, Kinetic sends a neutral set
 ### What does not carry over
 
 - **Button remaps, macros, Shift layers, DPI-stage hotkeys.** They need injected input, which anti-cheat still refuses. In a protected game the engine steps aside for them (if that switch is on), while the driver keeps processing movement.
-- **Raw Accel's other options** that Kinetic has no control for: input speed cap, left/right and up/down sensitivity split, per-device DPI normalisation, polling-rate lock. Kinetic leaves them off.
+- **Raw Accel's other options** that Kinetic has no control for: its own input speed cap, per-device DPI normalisation and the polling-rate lock. Kinetic leaves them off. (Kinetic's speed limit is built into the curve table instead, and caps the output speed.)
 - **Exact feel.** The curve is the same shape, but Raw Accel computes things in its own order (it rotates before accelerating, Kinetic accelerates then rotates) and smooths in its own way, so the feel can differ slightly from Kinetic's own processing. If it does, adjust smoothing first.
 
 ### How the settings reach the driver
@@ -432,13 +462,13 @@ npm run test:parity
 
 `cargo test` runs the engine's unit tests, including the ones that check the Raw Accel settings Kinetic generates. `test:parity` checks that the interface's acceleration curves match the engine's. `tests/e2e` drives a real engine with injected input; see [tests/e2e/README.md](tests/e2e/README.md).
 
-To regenerate the screenshots in this README, run `npx vite --port 5173 --host 127.0.0.1` in `app`, then run `electron scripts/shoot-docs.js` and `electron scripts/shoot-kernel.js` with `SHOOT_OUT` set to `docs/screenshots`.
+To regenerate the screenshots in this README, run `npx vite --port 5173 --host 127.0.0.1` in `app`, then run `electron scripts/shoot-docs.js`, `electron scripts/shoot-kernel.js` and `electron scripts/shoot-steady.js` with `SHOOT_OUT` set to `docs/screenshots`.
 
 ## How it works
 
 Two programs that talk over a named pipe (`\\.\pipe\kinetic-engine`, one JSON object per line):
 
-- **`engine/`** (Rust): everything time-critical lives here so a busy or closed interface can never make the mouse stutter. It reads devices with Raw Input, hooks mouse input with a low-level hook to remap buttons and the wheel, moves the pointer with `SendInput` for DPI, acceleration and smoothing, runs macros, watches the foreground app for profiles, talks to Razer mice over HID, and (in kernel mode) drives the Raw Accel driver. The kernel mode code is `engine/src/kernel.rs`.
+- **`engine/`** (Rust): everything time-critical lives here so a busy or closed interface can never make the mouse stutter. It reads devices with Raw Input, hooks mouse input with a low-level hook to remap buttons and the wheel, moves the pointer with `SendInput` for DPI, acceleration and smoothing, runs macros, watches the foreground app for profiles, talks to Razer mice over HID, and (in kernel mode) drives the Raw Accel driver. The kernel mode code is `engine/src/kernel.rs`, and the hold-still test is `engine/src/tremor.rs`.
 - **`app/`** (Electron, React, TypeScript): the interface, tray icon, start-with-Windows, installer, the in-app updater, and the guided Raw Accel install. It starts the engine and reconnects if it stops.
 
 Safety rules built in:

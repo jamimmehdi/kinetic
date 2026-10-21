@@ -232,7 +232,27 @@ fn accel_args(mode: &str, lut: Vec<f32>) -> Value {
     })
 }
 
-fn profile(accel: Value, combine: bool, output_dpi: f64, yx_ratio: f64, rotation: f64, snap: f64, halflife: f64) -> Value {
+/// Everything about a Raw Accel profile except the acceleration arguments.
+struct Shape {
+    combine: bool,
+    output_dpi: f64,
+    yx_ratio: f64,
+    rotation: f64,
+    snap: f64,
+    /// Half-lives in milliseconds. Zero means no smoothing.
+    output_halflife: f64,
+    input_halflife: f64,
+    left: f64,
+    up: f64,
+}
+
+impl Shape {
+    fn neutral() -> Shape {
+        Shape { combine: true, output_dpi: 1000.0, yx_ratio: 1.0, rotation: 0.0, snap: 0.0, output_halflife: 0.0, input_halflife: 0.0, left: 1.0, up: 1.0 }
+    }
+}
+
+fn profile(accel: Value, s: Shape) -> Value {
     json!({
         "name": "kinetic",
         "Stretches domain for horizontal vs vertical inputs": { "x": 1.0, "y": 1.0 },
@@ -240,18 +260,18 @@ fn profile(accel: Value, combine: bool, output_dpi: f64, yx_ratio: f64, rotation
         "Whole or horizontal accel parameters": accel.clone(),
         "Vertical accel parameters": accel,
         "Input speed calculation parameters": {
-            "Whole/combined accel (set false for 'by component' mode)": combine,
+            "Whole/combined accel (set false for 'by component' mode)": s.combine,
             "lpNorm": 2.0,
-            "Time in ms after which an input is weighted at half its original value.": 0.0,
+            "Time in ms after which an input is weighted at half its original value.": s.input_halflife,
             "Time in ms after which scale is weighted at half its original value.": 0.0,
-            "Time in ms after which an output is weighted at half its original value.": halflife,
+            "Time in ms after which an output is weighted at half its original value.": s.output_halflife,
         },
-        "Output DPI": output_dpi,
-        "Y/X output DPI ratio (vertical sens multiplier)": yx_ratio,
-        "L/R output DPI ratio (left sens multiplier)": 1.0,
-        "U/D output DPI ratio (up sens multiplier)": 1.0,
-        "Degrees of rotation": rotation,
-        "Degrees of angle snapping": snap,
+        "Output DPI": s.output_dpi,
+        "Y/X output DPI ratio (vertical sens multiplier)": s.yx_ratio,
+        "L/R output DPI ratio (left sens multiplier)": s.left,
+        "U/D output DPI ratio (up sens multiplier)": s.up,
+        "Degrees of rotation": s.rotation,
+        "Degrees of angle snapping": s.snap,
         "Input Speed Cap": 0.0,
     })
 }
@@ -272,13 +292,13 @@ fn document(profile: Value) -> Value {
 
 /// A setting that changes nothing: no acceleration, no scaling.
 pub fn neutral_settings() -> Value {
-    document(profile(accel_args("noaccel", vec![]), true, 1000.0, 1.0, 0.0, 0.0, 0.0))
+    document(profile(accel_args("noaccel", vec![]), Shape::neutral()))
 }
 
 /// Kinetic's curve as a lookup table of (speed in counts per ms, sensitivity multiplier) points.
 /// Sampling the finished curve keeps every mode, the gain form and the speed cap exactly as drawn.
 fn lookup_table(perf: &Perf) -> Vec<f32> {
-    let curve = Curve::build(&perf.accel);
+    let curve = Curve::build_with(&perf.accel, &perf.steady);
     let mut data = Vec::with_capacity(LUT_POINTS * 2);
     for i in 0..LUT_POINTS {
         // The driver treats a speed of zero specially, so start just above it.
@@ -295,24 +315,32 @@ pub fn build_settings(perf: &Perf, target: (u32, u32), native: u32) -> Value {
     // Output sensitivity multiplier = output DPI / 1000, so this scales the mouse's own DPI to the target.
     let output_dpi = 1000.0 * target.0 as f64 / native;
     let yx = (target.1 as f64 / target.0.max(1) as f64) * perf.y_ratio as f64;
-    let accel = if perf.accel.mode == crate::config::AccelMode::Off {
+    // The precision zone and the speed limit live in the curve, so they need the lookup table even
+    // when no acceleration mode is chosen.
+    let accel = if perf.accel.mode == crate::config::AccelMode::Off && !perf.steady.shapes_curve() {
         accel_args("noaccel", vec![])
     } else {
         accel_args("lut", lookup_table(perf))
     };
     // Smoothing here holds back a share of each move; the driver wants a half-life in milliseconds.
     // At the usual 1000 Hz one event is one millisecond.
-    let s = perf.smoothing as f64;
-    let halflife = if s > 0.001 { (0.5f64.ln() / s.ln()).max(0.0) } else { 0.0 };
-    let snap = if perf.angle_snap { 6.0 } else { 0.0 };
+    let halflife = |keep: f32| {
+        let k = keep as f64;
+        if k > 0.001 { (0.5f64.ln() / k.ln()).max(0.0) } else { 0.0 }
+    };
     document(profile(
         accel,
-        !perf.accel.per_axis,
-        output_dpi,
-        yx,
-        perf.rotation as f64,
-        snap,
-        halflife,
+        Shape {
+            combine: !perf.accel.per_axis,
+            output_dpi,
+            yx_ratio: yx,
+            rotation: perf.rotation as f64,
+            snap: if perf.angle_snap { perf.steady.snap_degrees as f64 } else { 0.0 },
+            output_halflife: halflife(perf.smoothing),
+            input_halflife: halflife(perf.steady.speed_smoothing),
+            left: perf.steady.left_ratio as f64,
+            up: perf.steady.up_ratio as f64,
+        },
     ))
 }
 
@@ -397,8 +425,42 @@ mod tests {
         let v = build_settings(&p, (1600, 1600), 1600);
         assert_eq!(prof(&v)["Degrees of rotation"], 12.0);
         assert_eq!(prof(&v)["Degrees of angle snapping"], 6.0);
+        let mut wide = perf();
+        wide.angle_snap = true;
+        wide.steady.snap_degrees = 15.0;
+        assert_eq!(prof(&build_settings(&wide, (1600, 1600), 1600))["Degrees of angle snapping"], 15.0);
         let half = prof(&v)["Input speed calculation parameters"]["Time in ms after which an output is weighted at half its original value."].as_f64().unwrap();
         assert!((half - 1.0).abs() < 1e-9, "half-life {half}");
+    }
+
+    #[test]
+    fn steady_hand_settings_reach_the_driver() {
+        let mut p = perf();
+        p.steady.left_ratio = 0.8;
+        p.steady.up_ratio = 1.25;
+        p.steady.speed_smoothing = 0.5;
+        let v = build_settings(&p, (1600, 1600), 1600);
+        assert_eq!(prof(&v)["L/R output DPI ratio (left sens multiplier)"], 0.800000011920929);
+        assert_eq!(prof(&v)["U/D output DPI ratio (up sens multiplier)"], 1.25);
+        let input = prof(&v)["Input speed calculation parameters"]["Time in ms after which an input is weighted at half its original value."].as_f64().unwrap();
+        assert!((input - 1.0).abs() < 1e-9, "input half-life {input}");
+    }
+
+    #[test]
+    fn precision_zone_and_speed_limit_use_the_lookup_table_without_a_curve() {
+        let mut p = perf();
+        assert_eq!(prof(&build_settings(&p, (1600, 1600), 1600))["Whole or horizontal accel parameters"]["mode"], "noaccel");
+        p.steady.precision = true;
+        p.steady.precision_below = 2.0;
+        p.steady.precision_factor = 0.5;
+        let v = build_settings(&p, (1600, 1600), 1600);
+        let a = &prof(&v)["Whole or horizontal accel parameters"];
+        assert_eq!(a["mode"], "lut");
+        let data = a["data"].as_array().unwrap();
+        let first = data[1].as_f64().unwrap();
+        assert!((first - 0.5).abs() < 0.02, "slowest point should keep about half sensitivity, got {first}");
+        let last = data[data.len() - 1].as_f64().unwrap();
+        assert!((last - 1.0).abs() < 1e-6, "fast movement is untouched, got {last}");
     }
 
     #[test]

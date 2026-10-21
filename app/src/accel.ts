@@ -1,4 +1,4 @@
-import type { Accel } from "./engine";
+import type { Accel, Steady } from "./engine";
 
 /**
  * Acceleration curves, ported from the engine (engine/src/accel.rs) so the editor can draw exactly
@@ -65,13 +65,23 @@ function value(a: Accel, v: number): number {
   return a.mode === "natural" || a.mode === "sigmoid" || a.mode === "jump" ? m : Math.min(m, limit);
 }
 
+/** Share of normal sensitivity kept in the precision zone: `factor` at a standstill, 1 at `below`. */
+export function precisionScale(v: number, below: number, factor: number): number {
+  if (v >= below) return 1;
+  const t = Math.min(Math.max(v / below, 0), 1);
+  const ease = t * t * (3 - 2 * t);
+  return factor + (1 - factor) * ease;
+}
+
 export interface Curve {
   /** Sensitivity multiplier at speed `v` (counts per millisecond). */
   multiplier(v: number): number;
 }
 
-export function buildCurve(a: Accel): Curve {
-  if (a.mode === "off") return { multiplier: () => 1 };
+export function buildCurve(a: Accel, steady?: Steady): Curve {
+  const limit = steady && steady.speed_limit > 0 ? steady.speed_limit : null;
+  const precision = !!steady?.precision;
+  if (a.mode === "off" && !precision && limit === null) return { multiplier: () => 1 };
   const step = V_MAX / SAMPLES;
   const table: number[] = [];
   let tail: [number, number] | null = null;
@@ -91,6 +101,12 @@ export function buildCurve(a: Accel): Curve {
     tail = [integral, prev];
   }
 
+  if (precision && steady) {
+    for (let i = 0; i < table.length; i++) table[i] *= precisionScale(i * step, steady.precision_below, steady.precision_factor);
+  }
+  // An explicit speed limit wins over the older on/off speed cap, which only applies with a curve on.
+  const cap = limit ?? (a.speed_cap && a.mode !== "off" ? SPEED_CAP : null);
+
   return {
     multiplier(vIn: number): number {
       const v = Number.isFinite(vIn) ? Math.max(vIn, 0) : 0;
@@ -105,7 +121,7 @@ export function buildCurve(a: Accel): Curve {
         const hi = table[Math.min(i + 1, table.length - 1)];
         m = lo + (hi - lo) * frac;
       }
-      if (a.speed_cap && v > 0) m = Math.min(m, SPEED_CAP / v);
+      if (cap !== null && v > 0) m = Math.min(m, cap / v);
       return m;
     },
   };

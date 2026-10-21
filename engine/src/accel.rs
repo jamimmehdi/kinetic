@@ -1,7 +1,7 @@
 //! Acceleration curves. A curve maps hand speed (counts per millisecond) to a sensitivity multiplier.
 //! The curve is sampled once into a table when the config changes, so the per-event cost is one lookup.
 
-use crate::config::{Accel, AccelMode, CurveKind};
+use crate::config::{Accel, AccelMode, CurveKind, Steady};
 
 /// Highest speed the table covers, in counts per millisecond.
 pub const V_MAX: f32 = 32.0;
@@ -14,17 +14,35 @@ pub struct Curve {
     step: f32,
     /// Gain curves keep the integral at V_MAX and the slope there, to extend past the table.
     tail: Option<(f32, f32)>,
-    cap: bool,
+    /// Highest output speed, in counts per millisecond.
+    cap: Option<f32>,
     identity: bool,
+}
+
+/// How much of normal sensitivity a movement of speed `v` keeps in the precision zone: `factor` at
+/// a standstill, easing up to 1 at `below`, and 1 beyond it.
+pub fn precision_scale(v: f32, below: f32, factor: f32) -> f32 {
+    if v >= below {
+        return 1.0;
+    }
+    let t = (v / below).clamp(0.0, 1.0);
+    let ease = t * t * (3.0 - 2.0 * t);
+    factor + (1.0 - factor) * ease
 }
 
 impl Curve {
     pub fn identity() -> Curve {
-        Curve { table: vec![1.0], step: 1.0, tail: None, cap: false, identity: true }
+        Curve { table: vec![1.0], step: 1.0, tail: None, cap: None, identity: true }
     }
 
     pub fn build(a: &Accel) -> Curve {
-        if a.mode == AccelMode::Off {
+        Curve::build_with(a, &Steady::default())
+    }
+
+    /// The curve with the steady-hand settings applied: the precision zone and the speed limit.
+    pub fn build_with(a: &Accel, steady: &Steady) -> Curve {
+        let limit = if steady.speed_limit > 0.0 { Some(steady.speed_limit) } else { None };
+        if a.mode == AccelMode::Off && !steady.precision && limit.is_none() {
             return Curve::identity();
         }
         let step = V_MAX / SAMPLES as f32;
@@ -50,7 +68,15 @@ impl Curve {
                 tail = Some((integral, prev));
             }
         }
-        Curve { table, step, tail, cap: a.speed_cap, identity: false }
+        if steady.precision {
+            for (i, m) in table.iter_mut().enumerate() {
+                *m *= precision_scale(i as f32 * step, steady.precision_below, steady.precision_factor);
+            }
+        }
+        // An explicit speed limit wins over the older on/off "speed cap" (which only applies when a
+        // curve is on, as it always did).
+        let cap = limit.or(if a.speed_cap && a.mode != AccelMode::Off { Some(SPEED_CAP) } else { None });
+        Curve { table, step, tail, cap, identity: false }
     }
 
     #[cfg(test)]
@@ -77,8 +103,10 @@ impl Curve {
             let b = self.table[(i + 1).min(self.table.len() - 1)];
             a + (b - a) * frac
         };
-        if self.cap && v > 0.0 {
-            m = m.min(SPEED_CAP / v);
+        if let Some(cap) = self.cap {
+            if v > 0.0 {
+                m = m.min(cap / v);
+            }
         }
         m
     }
@@ -252,6 +280,45 @@ mod tests {
     }
 
     #[test]
+    fn precision_zone_softens_slow_movement_only() {
+        let s = Steady { precision: true, precision_below: 2.0, precision_factor: 0.5, ..Steady::default() };
+        let c = Curve::build_with(&Accel::default(), &s);
+        assert!((c.multiplier(0.0) - 0.5).abs() < 0.01, "standstill gives {}", c.multiplier(0.0));
+        assert!(c.multiplier(0.5) < c.multiplier(1.5) && c.multiplier(1.5) < 1.0);
+        assert!((c.multiplier(2.0) - 1.0).abs() < 0.01);
+        assert!((c.multiplier(10.0) - 1.0).abs() < 0.01, "fast movement is untouched");
+    }
+
+    #[test]
+    fn precision_zone_stacks_on_top_of_a_curve() {
+        let s = Steady { precision: true, precision_below: 1.0, precision_factor: 0.5, ..Steady::default() };
+        let a = Accel { mode: AccelMode::Linear, rate: 0.5, limit: 3.0, ..Accel::default() };
+        let plain = Curve::build(&a);
+        let steady = Curve::build_with(&a, &s);
+        assert!(steady.multiplier(0.2) < plain.multiplier(0.2));
+        assert!((steady.multiplier(6.0) - plain.multiplier(6.0)).abs() < 0.01);
+    }
+
+    #[test]
+    fn speed_limit_works_without_a_curve() {
+        let s = Steady { speed_limit: 6.0, ..Steady::default() };
+        let c = Curve::build_with(&Accel::default(), &s);
+        assert!(!c.is_identity());
+        assert!((c.multiplier(3.0) - 1.0).abs() < 0.001, "below the limit nothing changes");
+        assert!(c.multiplier(20.0) * 20.0 <= 6.0 + 0.01, "output stays at the limit");
+    }
+
+    #[test]
+    fn default_steady_settings_change_nothing() {
+        let a = Accel { mode: AccelMode::Sigmoid, ..Accel::default() };
+        let (x, y) = (Curve::build(&a), Curve::build_with(&a, &Steady::default()));
+        for v in [0.0, 1.0, 5.0, 20.0] {
+            assert_eq!(x.multiplier(v), y.multiplier(v));
+        }
+        assert!(Curve::build_with(&Accel::default(), &Steady::default()).is_identity());
+    }
+
+    #[test]
     fn bad_input_speeds_are_safe() {
         let c = Curve::build(&accel(AccelMode::Linear));
         assert!(c.multiplier(f32::NAN).is_finite());
@@ -268,8 +335,9 @@ mod golden {
 
     const SPEEDS: [f32; 9] = [0.0, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 31.0, 40.0];
 
-    fn cases() -> Vec<Accel> {
+    fn cases() -> Vec<(Accel, Steady)> {
         let base = Accel::default();
+        let none = Steady::default();
         let mut out = Vec::new();
         for kind in [CurveKind::Sensitivity, CurveKind::Gain] {
             for mode in [
@@ -282,8 +350,19 @@ mod golden {
                 AccelMode::Jump,
                 AccelMode::Custom,
             ] {
-                out.push(Accel { mode, kind, ..base.clone() });
-                out.push(Accel { mode, kind, rate: 0.3, offset: 1.5, limit: 4.0, midpoint: 6.0, exponent: 3.0, speed_cap: true, ..base.clone() });
+                out.push((Accel { mode, kind, ..base.clone() }, none.clone()));
+                out.push((Accel { mode, kind, rate: 0.3, offset: 1.5, limit: 4.0, midpoint: 6.0, exponent: 3.0, speed_cap: true, ..base.clone() }, none.clone()));
+            }
+        }
+        // Steady-hand settings on top of a few curves.
+        let precision = Steady { precision: true, precision_below: 3.0, precision_factor: 0.4, ..none.clone() };
+        let limited = Steady { speed_limit: 9.0, ..none.clone() };
+        let both = Steady { precision: true, precision_below: 1.5, precision_factor: 0.7, speed_limit: 14.0, ..none.clone() };
+        for mode in [AccelMode::Off, AccelMode::Linear, AccelMode::Sigmoid, AccelMode::Custom] {
+            for kind in [CurveKind::Sensitivity, CurveKind::Gain] {
+                for s in [&precision, &limited, &both] {
+                    out.push((Accel { mode, kind, ..base.clone() }, s.clone()));
+                }
             }
         }
         out
@@ -297,10 +376,10 @@ mod golden {
     fn golden_values_match_fixture() {
         let rows: Vec<serde_json::Value> = cases()
             .into_iter()
-            .map(|a| {
-                let c = Curve::build(&a);
+            .map(|(a, s)| {
+                let c = Curve::build_with(&a, &s);
                 let values: Vec<f64> = SPEEDS.iter().map(|&v| (c.multiplier(v) as f64 * 1e5).round() / 1e5).collect();
-                serde_json::json!({ "accel": a, "speeds": SPEEDS, "values": values })
+                serde_json::json!({ "accel": a, "steady": s, "speeds": SPEEDS, "values": values })
             })
             .collect();
         let text = serde_json::to_string_pretty(&rows).unwrap();

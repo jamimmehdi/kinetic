@@ -150,6 +150,7 @@ unsafe fn handle_raw(lparam: LPARAM) {
         || (hook::test_mode() && mouse.ulExtraInformation as usize == hook::TEST_MARKER);
     if from_device {
         crate::measure::feed(&device, mouse.lLastX, mouse.lLastY);
+        crate::tremor::feed(mouse.lLastX, mouse.lLastY);
     }
     movement::on_raw(RawMove {
         dx: mouse.lLastX,

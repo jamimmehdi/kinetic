@@ -39,6 +39,35 @@ export interface Accel {
   points: [number, number][];
 }
 
+/** Settings for a shaky or uneven hand. They only reshape the movement the mouse reports. */
+export interface Steady {
+  /** Reduce sensitivity for very slow movement, where hand tremor lives. */
+  precision: boolean;
+  /** Speed (counts per ms) below which the reduction applies. */
+  precision_below: number;
+  /** Sensitivity at a standstill relative to normal, 0.1 to 1. */
+  precision_factor: number;
+  /** 0 to 0.95. Smooths the speed used for acceleration, not the pointer. */
+  speed_smoothing: number;
+  /** Highest output speed in counts per ms. 0 means no limit. */
+  speed_limit: number;
+  left_ratio: number;
+  up_ratio: number;
+  /** Angle snapping window in degrees. */
+  snap_degrees: number;
+}
+
+export const DEFAULT_STEADY: Steady = {
+  precision: false,
+  precision_below: 1,
+  precision_factor: 0.6,
+  speed_smoothing: 0.6,
+  speed_limit: 0,
+  left_ratio: 1,
+  up_ratio: 1,
+  snap_degrees: 6,
+};
+
 export interface Perf {
   native_dpi: number;
   stages: Stage[];
@@ -53,6 +82,7 @@ export interface Perf {
   scroll: { lines: number; smooth: boolean; reverse: boolean };
   /** With a supported mouse, set the mouse's own DPI to the stage instead of scaling in software. */
   use_hardware: boolean;
+  steady: Steady;
 }
 
 export interface Profile {
@@ -135,6 +165,7 @@ export function defaultPerf(): Perf {
     raw_movement: true,
     scroll: { lines: 3, smooth: false, reverse: false },
     use_hardware: true,
+    steady: { ...DEFAULT_STEADY },
   };
 }
 
@@ -234,7 +265,28 @@ export type EngineMessage =
   | ({ t: "report" } & DeviceReport)
   | { t: "activity"; entry: ActivityEntry }
   | { t: "activity_history"; entries: ActivityEntry[]; enabled: boolean }
-  | ({ t: "kernel" } & KernelStatus);
+  | ({ t: "kernel" } & KernelStatus)
+  | ({ t: "tremor" } & TremorState);
+
+/** The result of the hold-still test for a shaky hand. */
+export interface TremorResult {
+  events: number;
+  rms_counts: number;
+  /** Size of the shaking at the sensor, in millimetres. */
+  rms_mm: number;
+  dominant_hz: number;
+  prominence: number;
+  /** Fast end of the shaking speed, in counts per millisecond. */
+  peak_speed: number;
+  level: "none" | "light" | "medium" | "strong";
+  dpi: number;
+  suggestion: { precision: boolean; precision_below?: number; precision_factor?: number; speed_smoothing?: number };
+}
+
+export type TremorState =
+  | { state: "idle" }
+  | { state: "running"; elapsed_ms: number; seconds: number; events: number }
+  | ({ state: "done" } & TremorResult);
 
 /** The Raw Accel driver bridge: is it wanted, is it installed, is it doing the movement work. */
 export interface KernelStatus {
@@ -385,6 +437,9 @@ export interface EngineState {
   activity: ActivityEntry[];
   kernel: KernelStatus | null;
   requestKernel(): void;
+  tremor: TremorState;
+  tremorStart(seconds: number): void;
+  tremorCancel(): void;
   requestActivity(): void;
   clearActivity(): void;
   requestReport(): void;
@@ -431,6 +486,7 @@ export function useEngine(): EngineState {
   const [report, setReport] = useState<DeviceReport | null>(null);
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
   const [kernel, setKernel] = useState<KernelStatus | null>(null);
+  const [tremor, setTremor] = useState<TremorState>({ state: "idle" });
   const bridge = useRef(window.kinetic);
 
   useEffect(() => {
@@ -492,6 +548,12 @@ export function useEngine(): EngineState {
           void _t;
           setTelemetry(info);
           setSpeedHistory((prev) => [...prev.slice(1 - HISTORY), info.speed]);
+          break;
+        }
+        case "tremor": {
+          const { t: _t, ...state } = m;
+          void _t;
+          setTremor(state);
           break;
         }
         case "kernel": {
@@ -563,7 +625,9 @@ export function useEngine(): EngineState {
 
   return {
     connected, version, paused, game, asideReason, devices, config, activeProfile, activeApp, shiftActive, dpi, hardware, telemetry,
-    speedHistory, apps, runningMacros, pressed, lastPressed, learn, candidates, measure, lastButton, report, activity, kernel, setConfig,
+    speedHistory, apps, runningMacros, pressed, lastPressed, learn, candidates, measure, lastButton, report, activity, kernel, tremor, setConfig,
+    tremorStart: useCallback((seconds: number) => send({ cmd: "tremor_start", seconds }), [send]),
+    tremorCancel: useCallback(() => send({ cmd: "tremor_cancel" }), [send]),
     requestKernel: useCallback(() => send({ cmd: "kernel_refresh" }), [send]),
     requestActivity: useCallback(() => send({ cmd: "activity_history" }), [send]),
     clearActivity: useCallback(() => send({ cmd: "activity_clear" }), [send]),

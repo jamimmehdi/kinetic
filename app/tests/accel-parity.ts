@@ -2,10 +2,11 @@
 // Run with: node tests/accel-parity.ts
 import { readFileSync } from "node:fs";
 import { buildCurve } from "../src/accel.ts";
-import type { Accel } from "../src/engine.ts";
+import type { Accel, Steady } from "../src/engine.ts";
 
 interface Row {
   accel: Accel;
+  steady?: Steady;
   speeds: number[];
   values: number[];
 }
@@ -13,7 +14,7 @@ interface Row {
 const rows: Row[] = JSON.parse(readFileSync(new URL("./accel-golden.json", import.meta.url), "utf8"));
 let bad = 0;
 for (const [i, row] of rows.entries()) {
-  const curve = buildCurve(row.accel);
+  const curve = buildCurve(row.accel, row.steady);
   row.speeds.forEach((v, j) => {
     const got = curve.multiplier(v);
     // The engine stores f32; the UI uses f64. Allow for that rounding.

@@ -20,6 +20,7 @@ export function installDevMock() {
   let stage = config.profiles[0].perf.active_stage;
   let paused = false;
   let measureTimer = 0;
+  let tremorTimer = 0;
   let measureCm = 10;
   let measureCounts = () => 0;
   let moving = false;
@@ -110,6 +111,31 @@ export function installDevMock() {
           if (!multi) setTimeout(() => emit({ t: "learn", state: "found", button: 7 }), 1500);
           break;
         }
+        case "tremor_start": {
+          const seconds = Number((m as { seconds?: number }).seconds) || 10;
+          let ms = 0;
+          emit({ t: "tremor", state: "running", elapsed_ms: 0, seconds, events: 0 });
+          tremorTimer = window.setInterval(() => {
+            ms += 250;
+            if (ms >= seconds * 1000) {
+              window.clearInterval(tremorTimer);
+              tremorTimer = 0;
+              emit({
+                t: "tremor", state: "done", events: 1840, rms_counts: 5.1, rms_mm: 0.162, dominant_hz: 7.5, prominence: 12.4,
+                peak_speed: 0.62, level: "medium", dpi: 800,
+                suggestion: { precision: true, precision_below: 0.93, precision_factor: 0.6, speed_smoothing: 0.75 },
+              });
+            } else {
+              emit({ t: "tremor", state: "running", elapsed_ms: ms, seconds, events: Math.round(ms * 0.9) });
+            }
+          }, 250);
+          break;
+        }
+        case "tremor_cancel":
+          if (tremorTimer) window.clearInterval(tremorTimer);
+          tremorTimer = 0;
+          emit({ t: "tremor", state: "idle" });
+          break;
         case "kernel_refresh":
           emit({ t: "kernel", enabled: settings.kernelMode, driver: false, writer: false, active: false, error: null });
           break;

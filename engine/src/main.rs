@@ -24,6 +24,7 @@ mod report;
 mod scroll;
 mod spi;
 mod state;
+mod tremor;
 
 use windows::core::BOOL;
 use windows::Win32::System::Console::SetConsoleCtrlHandler;

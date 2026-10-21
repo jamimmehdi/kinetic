@@ -181,6 +181,8 @@ fn handle_command(text: &str) {
             }
         }
         Some("set_game_guard") => state::set_guard(cmd.get("enabled").and_then(Value::as_bool).unwrap_or(true)),
+        Some("tremor_start") => crate::tremor::start(cmd.get("seconds").and_then(Value::as_u64).unwrap_or(10), movement::current_native_dpi()),
+        Some("tremor_cancel") => crate::tremor::cancel(),
         Some("set_kernel_mode") => kernel::set_enabled(cmd.get("enabled").and_then(Value::as_bool).unwrap_or(false)),
         Some("kernel_refresh") => kernel::refresh(),
         Some("set_failsafe") => state::set_failsafe(cmd.get("enabled").and_then(Value::as_bool).unwrap_or(true)),

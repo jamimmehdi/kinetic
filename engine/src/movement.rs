@@ -25,8 +25,6 @@ static HOLD: AtomicUsize = AtomicUsize::new(NO_HOLD);
 /// The starting stage the active profile had the last time we looked, to notice edits to it.
 static CONFIG_STAGE: AtomicUsize = AtomicUsize::new(usize::MAX);
 
-/// Angle, in degrees, within which a stroke is snapped onto an axis.
-const SNAP_DEGREES: f32 = 6.0;
 /// Hardest smoothing the processor applies, whatever the setting says.
 const MAX_SMOOTHING: f32 = 0.98;
 
@@ -62,7 +60,7 @@ impl Processor {
         let rad = perf.rotation.to_radians();
         Processor {
             perf: perf.clone(),
-            curve: Curve::build(&perf.accel),
+            curve: Curve::build_with(&perf.accel, &perf.steady),
             sx: dx as f32 / native,
             sy: dy as f32 / native * perf.y_ratio,
             cos: rad.cos(),
@@ -91,9 +89,9 @@ impl Processor {
             let (ax, ay) = (self.dir.0.abs(), self.dir.1.abs());
             if ax + ay > 4.0 {
                 let angle = ay.atan2(ax).to_degrees();
-                if angle < SNAP_DEGREES {
+                if angle < self.perf.steady.snap_degrees {
                     fy = 0.0;
-                } else if angle > 90.0 - SNAP_DEGREES {
+                } else if angle > 90.0 - self.perf.steady.snap_degrees {
                     fx = 0.0;
                 }
             }
@@ -101,7 +99,8 @@ impl Processor {
 
         // Hand speed in counts per ms, smoothed over a few events so one odd gap does not jolt it.
         let inst = fx.hypot(fy) / dt;
-        let blend = |old: f32, new: f32| if idle { new } else { 0.6 * old + 0.4 * new };
+        let keep = self.perf.steady.speed_smoothing;
+        let blend = |old: f32, new: f32| if idle { new } else { keep * old + (1.0 - keep) * new };
         self.speed = blend(self.speed, inst);
         self.speed_x = blend(self.speed_x, fx.abs() / dt);
         self.speed_y = blend(self.speed_y, fy.abs() / dt);
@@ -115,7 +114,14 @@ impl Processor {
         self.last_mult = if self.perf.accel.per_axis { (mx + my) * 0.5 } else { mx };
 
         let (ox, oy) = (fx * self.sx * mx, fy * self.sy * my);
-        let (rx, ry) = (ox * self.cos - oy * self.sin, ox * self.sin + oy * self.cos);
+        let (mut rx, mut ry) = (ox * self.cos - oy * self.sin, ox * self.sin + oy * self.cos);
+        // Hand bias: left and up can be scaled differently from right and down.
+        if rx < 0.0 {
+            rx *= self.perf.steady.left_ratio;
+        }
+        if ry < 0.0 {
+            ry *= self.perf.steady.up_ratio;
+        }
 
         // Smoothing holds back part of the movement and delivers it with the next events. Anything
         // still held after a pause is released at once, so the total distance never changes.
@@ -141,6 +147,11 @@ fn target_dpi(perf: &Perf, stage: usize) -> (u32, u32) {
 }
 
 /// What the mouse really runs at: its own reading when a supported mouse is connected.
+/// The DPI the mouse really runs at right now, for tools that need to turn counts into distance.
+pub fn current_native_dpi() -> u32 {
+    native_dpi(&active_perf())
+}
+
 fn native_dpi(perf: &Perf) -> u32 {
     razer::hardware_dpi().map(|d| d.0).unwrap_or(perf.native_dpi)
 }
@@ -508,6 +519,48 @@ mod tests {
         let mut d = Processor::new(&pf, NATIVE);
         let (dx, dy) = run(&mut d, &[(10, 10), (10, 10), (10, 10)]);
         assert_eq!((dx, dy), (30, 30));
+    }
+
+    #[test]
+    fn snap_window_is_adjustable() {
+        let wide = |deg: f32| {
+            let mut pf = perf();
+            pf.angle_snap = true;
+            pf.steady.snap_degrees = deg;
+            Processor::new(&pf, NATIVE)
+        };
+        // About 14 degrees off horizontal: a 6 degree window leaves it alone, a 20 degree one straightens it.
+        let moves = [(20, 5), (20, 5), (20, 5)];
+        let (_, y_narrow) = run(&mut wide(6.0), &moves);
+        let (_, y_wide) = run(&mut wide(20.0), &moves);
+        assert_eq!(y_narrow, 15);
+        assert_eq!(y_wide, 0);
+    }
+
+    #[test]
+    fn hand_bias_scales_left_and_up_only() {
+        let mut pf = perf();
+        pf.steady.left_ratio = 0.5;
+        pf.steady.up_ratio = 2.0;
+        let mut p = Processor::new(&pf, NATIVE);
+        assert_eq!(run(&mut p, &[(10, 0)]), (10, 0), "right is untouched");
+        assert_eq!(run(&mut p, &[(-10, 0)]).0, -5, "left is halved");
+        assert_eq!(run(&mut p, &[(0, 10)]), (0, 10), "down is untouched");
+        assert_eq!(run(&mut p, &[(0, -10)]).1, -20, "up is doubled");
+    }
+
+    #[test]
+    fn speed_smoothing_setting_changes_how_fast_the_speed_follows() {
+        let speed_after = |keep: f32| {
+            let mut pf = perf();
+            pf.steady.speed_smoothing = keep;
+            let mut p = Processor::new(&pf, NATIVE);
+            p.process(1, 0, 1.0);
+            p.process(1, 0, 1.0);
+            p.process(30, 0, 1.0);
+            p.speed
+        };
+        assert!(speed_after(0.9) < speed_after(0.2), "heavier smoothing follows a sudden jump more slowly");
     }
 
     #[test]
