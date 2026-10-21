@@ -67,16 +67,25 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Kinetic-Setup-${version}.exe"
     },
     "publish": {
-      "provider": "generic",
-      "url": "https://example.invalid/kinetic/"
+      "provider": "github",
+      "owner": "jamimmehdi",
+      "repo": "kinetic"
     },
     "electronDist": "node_modules/electron/dist"
   },
   "kinetic": {
-    "repo": { "owner": "jamimmehdi", "repo": "kinetic" },
-    "updates": null
+    "repo": {
+      "owner": "jamimmehdi",
+      "repo": "kinetic"
+    },
+    "updates": {
+      "provider": "github",
+      "owner": "jamimmehdi",
+      "repo": "kinetic"
+    }
   }
 }
