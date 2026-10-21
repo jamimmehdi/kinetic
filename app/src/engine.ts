@@ -227,7 +227,7 @@ export type EngineMessage =
   | ({ t: "dpi" } & DpiInfo)
   | ({ t: "hardware" } & HardwareInfo)
   | { t: "layer"; shift: boolean }
-  | { t: "engine"; paused: boolean }
+  | { t: "engine"; paused: boolean; game?: boolean }
   | ({ t: "learn" } & LearnState)
   | { t: "learn"; state: "candidates"; items: LearnCandidate[] }
   | ({ t: "measure" } & MeasureState)
@@ -312,6 +312,8 @@ export interface EngineState {
   connected: boolean;
   version: string | null;
   paused: boolean;
+  /** The engine has stepped aside because a game with anti-cheat is in front (or input was blocked). */
+  game: boolean;
   devices: DeviceInfo[];
   config: EngineConfig;
   /** Profile the engine is using right now, chosen by the app in front. */
@@ -357,6 +359,7 @@ export function useEngine(): EngineState {
   const [connected, setConnected] = useState(false);
   const [version, setVersion] = useState<string | null>(null);
   const [paused, setPausedState] = useState(false);
+  const [game, setGame] = useState(false);
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
   const [config, setConfigState] = useState<EngineConfig>(EMPTY_CONFIG);
   const [activeProfile, setActiveProfile] = useState(DEFAULT_PROFILE);
@@ -416,6 +419,7 @@ export function useEngine(): EngineState {
           break;
         case "engine":
           setPausedState(m.paused);
+          setGame(!!m.game);
           break;
         case "dpi": {
           const { t: _t, ...info } = m;
@@ -492,7 +496,7 @@ export function useEngine(): EngineState {
   }, []);
 
   return {
-    connected, version, paused, devices, config, activeProfile, activeApp, shiftActive, dpi, hardware, telemetry,
+    connected, version, paused, game, devices, config, activeProfile, activeApp, shiftActive, dpi, hardware, telemetry,
     speedHistory, apps, runningMacros, pressed, lastPressed, learn, candidates, measure, lastButton, report, setConfig,
     requestReport: useCallback(() => send({ cmd: "device_report" }), [send]),
     requestApps: useCallback(() => send({ cmd: "list_apps" }), [send]),

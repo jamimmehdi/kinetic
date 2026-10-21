@@ -17,6 +17,40 @@ use windows::Win32::UI::WindowsAndMessaging::{
 /// Kinetic's own windows never change the profile, so editing settings does not flip it.
 const OWN_APPS: [&str; 3] = ["electron.exe", "kinetic.exe", "kinetic-app.exe"];
 
+/// Games whose anti-cheat (Riot Vanguard, EasyAntiCheat, BattlEye and similar) blocks or punishes
+/// software that hooks, swallows or injects mouse input. While one is in front the engine does
+/// nothing at all, so the mouse behaves exactly as without Kinetic.
+const PROTECTED_GAMES: [&str; 24] = [
+    "valorant.exe",
+    "valorant-win64-shipping.exe",
+    "league of legends.exe",
+    "fortniteclient-win64-shipping.exe",
+    "r5apex.exe",
+    "r5apex_dx12.exe",
+    "eldenring.exe",
+    "destiny2.exe",
+    "bf2042.exe",
+    "bfv.exe",
+    "battlefield 6.exe",
+    "modernwarfare.exe",
+    "cod.exe",
+    "cod22-cod.exe",
+    "rainbowsix.exe",
+    "rainbowsix_vulkan.exe",
+    "tslgame.exe",
+    "escapefromtarkov.exe",
+    "fallguys_client_game.exe",
+    "thefinals.exe",
+    "marvelrivals_launcher.exe",
+    "marvel-win64-shipping.exe",
+    "deadlock.exe",
+    "dayz_x64.exe",
+];
+
+pub fn is_protected_game(exe: &str) -> bool {
+    PROTECTED_GAMES.contains(&exe)
+}
+
 /// Last real app that was in front.
 static LAST_APP: Mutex<String> = Mutex::new(String::new());
 
@@ -65,6 +99,7 @@ fn apply(hwnd: HWND) {
     if OWN_APPS.contains(&exe.as_str()) {
         return;
     }
+    crate::state::set_game(is_protected_game(&exe));
     if let Ok(mut last) = LAST_APP.lock() {
         *last = exe;
     }
@@ -108,4 +143,15 @@ pub fn list_apps() -> Vec<String> {
     }
     apps.sort();
     apps
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn protected_games_are_recognised() {
+        assert!(is_protected_game("valorant-win64-shipping.exe"));
+        assert!(!is_protected_game("notepad.exe"));
+    }
 }

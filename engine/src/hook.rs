@@ -77,6 +77,10 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
         // Skip input we injected ourselves, otherwise a remap could trigger itself. The one
         // exception is test mode, where a test tool marks its fake input with TEST_MARKER.
         let injected = info.flags & LLMHF_INJECTED != 0;
+        if injected && wparam.0 as u32 == WM_MOUSEMOVE {
+            // Our own moves made it through, so injection is not being blocked.
+            movement::note_injected_seen();
+        }
         if !injected || (test_mode() && info.dwExtraInfo == TEST_MARKER) {
             let message = wparam.0 as u32;
             if message == WM_MOUSEMOVE {

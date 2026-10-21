@@ -50,8 +50,8 @@ export function DashboardScreen({ engine }: { engine: EngineState }) {
           {engine.connected ? deviceLabel(device) : "Engine not running"}
         </Pill>
         <span className="pill">Profile · <b style={{ fontWeight: 600 }}>{active.name}</b></span>
-        <button className="btn" type="button" disabled={!engine.connected} onClick={() => engine.setPaused(!engine.paused)}>
-          {engine.paused ? "Resume engine" : "Pause engine"}
+        <button className="btn" type="button" disabled={!engine.connected || engine.game} onClick={() => engine.setPaused(!engine.paused)}>
+          {engine.game ? "Paused for a game" : engine.paused ? "Resume engine" : "Pause engine"}
         </button>
       </Top>
 

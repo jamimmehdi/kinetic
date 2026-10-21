@@ -10,7 +10,7 @@ use crate::accel::Curve;
 use crate::config::{self, Perf};
 use crate::{bus, hook, razer, spi, state};
 use serde_json::json;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -307,6 +307,15 @@ static STATS: Mutex<Stats> = Mutex::new(Stats {
     last_event: None,
 });
 
+/// Moves we sent that the hook has not yet seen come back. Software that blocks injected input
+/// (some anti-cheat drivers) leaves this growing, and a swallowed mouse would then never move.
+static SENT_UNSEEN: AtomicU32 = AtomicU32::new(0);
+const BLOCKED_AFTER: u32 = 60;
+
+pub fn note_injected_seen() {
+    SENT_UNSEEN.store(0, Ordering::Relaxed);
+}
+
 /// Called for every movement from a real device.
 pub fn on_raw(m: RawMove) {
     if !m.from_device || !m.relative || (m.dx == 0 && m.dy == 0) || state::paused() {
@@ -329,6 +338,13 @@ pub fn on_raw(m: RawMove) {
     let Some(((ix, iy), mult)) = out else { return };
     if ix != 0 || iy != 0 {
         hook::send(&[hook::move_input(ix, iy)]);
+        if SENT_UNSEEN.fetch_add(1, Ordering::Relaxed) + 1 >= BLOCKED_AFTER && !hook::test_mode() {
+            // Injection is being dropped. Step aside so the physical mouse works again; the engine
+            // tries again when another window comes to the front.
+            SENT_UNSEEN.store(0, Ordering::Relaxed);
+            state::set_game(true);
+            return;
+        }
     }
     if let Ok(mut s) = STATS.lock() {
         let took = started.elapsed().as_micros() as f32;

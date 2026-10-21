@@ -5,11 +5,32 @@ use serde_json::json;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 static PAUSED: AtomicBool = AtomicBool::new(false);
+/// A game with kernel-level anti-cheat is in front. The engine steps aside completely there.
+static GAME: AtomicBool = AtomicBool::new(false);
 /// Number of Shift-layer buttons currently held.
 static SHIFT_HELD: AtomicU32 = AtomicU32::new(0);
 
+/// True when the engine must leave input alone: paused by the user, or a protected game is in front.
 pub fn paused() -> bool {
-    PAUSED.load(Ordering::Relaxed)
+    PAUSED.load(Ordering::Relaxed) || GAME.load(Ordering::Relaxed)
+}
+
+pub fn game_active() -> bool {
+    GAME.load(Ordering::Relaxed)
+}
+
+/// A protected game came to the front or left it.
+pub fn set_game(on: bool) {
+    if GAME.swap(on, Ordering::Relaxed) == on {
+        return;
+    }
+    if on {
+        SHIFT_HELD.store(0, Ordering::Relaxed);
+        crate::macros::stop_all();
+    }
+    crate::movement::apply_config();
+    bus::publish(&event());
+    bus::publish(&layer_event());
 }
 
 /// Pause or resume everything the engine does to input.
@@ -40,7 +61,7 @@ pub fn shift_button(down: bool) {
 }
 
 pub fn event() -> serde_json::Value {
-    json!({ "t": "engine", "paused": paused() })
+    json!({ "t": "engine", "paused": paused(), "game": game_active() })
 }
 
 pub fn layer_event() -> serde_json::Value {
