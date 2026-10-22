@@ -266,7 +266,8 @@ export type EngineMessage =
   | { t: "activity"; entry: ActivityEntry }
   | { t: "activity_history"; entries: ActivityEntry[]; enabled: boolean }
   | ({ t: "kernel" } & KernelStatus)
-  | ({ t: "tremor" } & TremorState);
+  | ({ t: "tremor" } & TremorState)
+  | { t: "saved"; at: number; path: string | null };
 
 /** The result of the hold-still test for a shaky hand. */
 export interface TremorResult {
@@ -305,6 +306,15 @@ export type KernelInstall =
   | { state: "downloading" | "verifying" | "extracting" | "installing" | "removing" }
   | { state: "done"; restart: boolean }
   | { state: "error"; message: string };
+
+/** Whether Kinetic will really start when Windows does, read back from Windows. */
+export type StartupStatus =
+  | { state: "dev" }
+  | { state: "off" }
+  | { state: "ok" }
+  | { state: "missing" }
+  | { state: "wrong-program" }
+  | { state: "disabled" };
 
 export interface KernelBridge {
   install(): Promise<void>;
@@ -351,6 +361,13 @@ export interface KineticBridge {
   pickFile?(): Promise<string | null>;
   getVersion?(): Promise<string>;
   showLog?(): Promise<void>;
+  startup?: {
+    getStatus(): Promise<StartupStatus>;
+    repair(): Promise<StartupStatus>;
+    openWindowsSettings(): Promise<void>;
+  };
+  exportSettings?(text: string): Promise<string | null>;
+  importSettings?(): Promise<{ cancelled?: boolean; error?: string; config?: unknown }>;
   kernel?: KernelBridge;
   openIssue?(title: string, body: string): Promise<{ opened: boolean; truncated?: boolean; reason?: string }>;
   updates?: UpdatesBridge;
@@ -437,6 +454,8 @@ export interface EngineState {
   activity: ActivityEntry[];
   kernel: KernelStatus | null;
   requestKernel(): void;
+  /** When the settings were last written to disk (ms since 1970), and where. */
+  saved: { at: number; path: string | null } | null;
   tremor: TremorState;
   tremorStart(seconds: number): void;
   tremorCancel(): void;
@@ -487,6 +506,7 @@ export function useEngine(): EngineState {
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
   const [kernel, setKernel] = useState<KernelStatus | null>(null);
   const [tremor, setTremor] = useState<TremorState>({ state: "idle" });
+  const [saved, setSaved] = useState<{ at: number; path: string | null } | null>(null);
   const bridge = useRef(window.kinetic);
 
   useEffect(() => {
@@ -550,6 +570,9 @@ export function useEngine(): EngineState {
           setSpeedHistory((prev) => [...prev.slice(1 - HISTORY), info.speed]);
           break;
         }
+        case "saved":
+          setSaved({ at: m.at, path: m.path });
+          break;
         case "tremor": {
           const { t: _t, ...state } = m;
           void _t;
@@ -625,7 +648,7 @@ export function useEngine(): EngineState {
 
   return {
     connected, version, paused, game, asideReason, devices, config, activeProfile, activeApp, shiftActive, dpi, hardware, telemetry,
-    speedHistory, apps, runningMacros, pressed, lastPressed, learn, candidates, measure, lastButton, report, activity, kernel, tremor, setConfig,
+    speedHistory, apps, runningMacros, pressed, lastPressed, learn, candidates, measure, lastButton, report, activity, kernel, saved, tremor, setConfig,
     tremorStart: useCallback((seconds: number) => send({ cmd: "tremor_start", seconds }), [send]),
     tremorCancel: useCallback(() => send({ cmd: "tremor_cancel" }), [send]),
     requestKernel: useCallback(() => send({ cmd: "kernel_refresh" }), [send]),

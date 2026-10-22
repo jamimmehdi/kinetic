@@ -74,10 +74,53 @@ function saveSettings() {
   }
 }
 
-/** Registers or removes the sign-in launch. Only a packaged app has a real executable to launch. */
-function applyLoginItem() {
+// ---- start with Windows ------------------------------------------------------------------------
+// Electron's own login-item call proved unreliable (no entry was left behind), so the Run key is
+// written directly. The value is the installed program plus --hidden, so Kinetic opens in the tray.
+
+const RUN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+const APPROVED_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run";
+const RUN_NAME = "Kinetic";
+
+function reg(args: string[]): Promise<{ ok: boolean; out: string }> {
+  return new Promise((resolve) => {
+    execFile("reg.exe", args, { windowsHide: true, timeout: 15_000 }, (err, stdout) => resolve({ ok: !err, out: String(stdout ?? "") }));
+  });
+}
+
+type StartupStatus =
+  | { state: "dev" }
+  | { state: "off" }
+  | { state: "ok" }
+  | { state: "missing" }
+  | { state: "wrong-program" }
+  | { state: "disabled" };
+
+/** Whether Kinetic will really start at sign-in, read back from Windows. */
+async function startupStatus(): Promise<StartupStatus> {
+  if (!app.isPackaged) return { state: "dev" };
+  const run = await reg(["query", RUN_KEY, "/v", RUN_NAME]);
+  const registered = run.ok && run.out.toLowerCase().includes(process.execPath.toLowerCase());
+  if (!settings.startWithWindows) return registered ? { state: "ok" } : { state: "off" };
+  if (!run.ok) return { state: "missing" };
+  if (!registered) return { state: "wrong-program" };
+  // Windows keeps a switch for each startup app: Settings → Apps → Startup. First byte 03 means off.
+  const approved = await reg(["query", APPROVED_KEY, "/v", RUN_NAME]);
+  if (approved.ok && /REG_BINARY\s+03/i.test(approved.out)) return { state: "disabled" };
+  return { state: "ok" };
+}
+
+/** Makes the sign-in launch match the setting: adds or removes the Run entry. */
+async function applyLoginItem(): Promise<void> {
   if (!app.isPackaged) return;
-  app.setLoginItemSettings({ openAtLogin: settings.startWithWindows, args: ["--hidden"] });
+  // Clear anything Electron's own call may have left, so there is only ever one entry.
+  app.setLoginItemSettings({ openAtLogin: false });
+  if (settings.startWithWindows) {
+    await reg(["add", RUN_KEY, "/v", RUN_NAME, "/t", "REG_SZ", "/d", `"${process.execPath}" --hidden`, "/f"]);
+    // A switch left off in Windows' startup settings is the user's call, so leave it alone.
+  } else {
+    await reg(["delete", RUN_KEY, "/v", RUN_NAME, "/f"]);
+  }
 }
 
 // ---- engine connection --------------------------------------------------------------------------
@@ -257,8 +300,38 @@ ipcMain.handle("app:setSettings", (_e, patch: Partial<AppSettings>) => {
   send({ cmd: "set_game_guard", enabled: settings.gameGuard });
   send({ cmd: "set_activity_log", enabled: settings.activityLog });
   send({ cmd: "set_failsafe", enabled: settings.blockedFailsafe });
-  applyLoginItem();
+  void applyLoginItem();
   return settings;
+});
+ipcMain.handle("app:getStartup", () => startupStatus());
+ipcMain.handle("app:repairStartup", async () => {
+  await applyLoginItem();
+  return startupStatus();
+});
+ipcMain.handle("app:openStartupSettings", () => shell.openExternal("ms-settings:startupapps"));
+
+// Backing up and restoring settings by hand. The page passes the settings as text; the engine checks
+// and cleans them when they are imported.
+ipcMain.handle("app:exportSettings", async (_e, text: unknown) => {
+  if (typeof text !== "string" || text.length > 5_000_000) return null;
+  const stamp = new Date().toISOString().slice(0, 10);
+  const pick = await dialog.showSaveDialog({ title: "Save Kinetic settings", defaultPath: `kinetic-settings-${stamp}.json`, filters: [{ name: "Kinetic settings", extensions: ["json"] }] });
+  if (pick.canceled || !pick.filePath) return null;
+  fs.writeFileSync(pick.filePath, text, "utf8");
+  return pick.filePath;
+});
+ipcMain.handle("app:importSettings", async () => {
+  const pick = await dialog.showOpenDialog({ title: "Load Kinetic settings", properties: ["openFile"], filters: [{ name: "Kinetic settings", extensions: ["json"] }] });
+  if (pick.canceled || !pick.filePaths[0]) return { cancelled: true };
+  try {
+    const size = fs.statSync(pick.filePaths[0]).size;
+    if (size > 5_000_000) return { error: "That file is too large to be a Kinetic settings file." };
+    const config = JSON.parse(fs.readFileSync(pick.filePaths[0], "utf8"));
+    if (!config || typeof config !== "object" || !Array.isArray(config.profiles)) return { error: "That file does not look like Kinetic settings." };
+    return { config };
+  } catch {
+    return { error: "That file could not be read as settings." };
+  }
 });
 // ---- Raw Accel (kernel mode) -----------------------------------------------------------------------
 // Raw Accel is a separate, MIT-licensed, Microsoft-signed mouse driver (github.com/RawAccelOfficial/rawaccel).
@@ -519,7 +592,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on("second-instance", showWindow);
   app.whenReady().then(() => {
     settings = loadSettings();
-    applyLoginItem();
+    void applyLoginItem();
     setupUpdater();
     createWindow();
     createTray();

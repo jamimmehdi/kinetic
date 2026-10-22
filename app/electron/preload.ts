@@ -29,6 +29,17 @@ contextBridge.exposeInMainWorld("kinetic", {
       return () => ipcRenderer.removeListener("kernel:install", handler);
     },
   },
+  startup: {
+    getStatus: (): Promise<unknown> => ipcRenderer.invoke("app:getStartup"),
+    repair: (): Promise<unknown> => ipcRenderer.invoke("app:repairStartup"),
+    openWindowsSettings: (): Promise<void> => ipcRenderer.invoke("app:openStartupSettings"),
+  },
+  exportSettings(text: string): Promise<string | null> {
+    return ipcRenderer.invoke("app:exportSettings", text);
+  },
+  importSettings(): Promise<{ cancelled?: boolean; error?: string; config?: unknown }> {
+    return ipcRenderer.invoke("app:importSettings");
+  },
   showLog(): Promise<void> {
     return ipcRenderer.invoke("app:showLog");
   },

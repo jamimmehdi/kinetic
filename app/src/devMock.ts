@@ -26,7 +26,7 @@ export function installDevMock() {
   let moving = false;
   let pollingHz = 1000;
   let settings: AppSettings = {
-    startWithWindows: false, minimizeToTray: true, autoUpdate: true, gameGuard: true, activityLog: false, blockedFailsafe: true, kernelMode: false,
+    startWithWindows: true, minimizeToTray: true, autoUpdate: true, gameGuard: true, activityLog: false, blockedFailsafe: true, kernelMode: false,
     setupDone: (() => { try { return localStorage.getItem(setupDoneKey) === "1"; } catch { return false; } })(),
   };
   let candidates: LearnCandidate[] = [];
@@ -51,6 +51,7 @@ export function installDevMock() {
         cb({ t: "engine", paused });
         cb({ t: "layer", shift: false });
         cb(dpiMessage());
+        cb({ t: "saved", at: Date.now() - 90_000, path: "C:\\Users\\you\\AppData\\Roaming\\Kinetic\\config.json" });
         cb({ t: "hardware", connected: hwConnected, vendor: "Razer", dpi_x: stageDpi(perf(), stage)[0], dpi_y: stageDpi(perf(), stage)[1], polling_hz: pollingHz, polling_options: [125, 500, 1000], can_set_polling: true, can_set_dpi: true, battery: 69 });
       });
       return () => messageListeners.delete(cb);
@@ -203,6 +204,13 @@ export function installDevMock() {
       return { ...settings };
     },
     getVersion: async () => "0.1.0",
+    startup: {
+      getStatus: async () => ({ state: "ok" as const }),
+      repair: async () => ({ state: "ok" as const }),
+      openWindowsSettings: async () => {},
+    },
+    exportSettings: async () => "C:\\Users\\you\\Documents\\kinetic-settings.json",
+    importSettings: async () => ({ cancelled: true }),
     openIssue: async (title, body) => {
       try { await navigator.clipboard.writeText(body); } catch { /* clipboard unavailable */ }
       window.open(`https://github.com/jamimmehdi/kinetic/issues/new?title=${encodeURIComponent(title)}`, "_blank");

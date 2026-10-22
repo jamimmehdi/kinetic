@@ -217,7 +217,8 @@ Anything a profile leaves unmapped falls back to the Default profile. Settings c
 | Setting | What it does |
 |---|---|
 | **Dark theme** | Switches between the dark and light theme |
-| **Start with Windows** | Opens Kinetic in the tray at sign-in so remaps work straight away |
+| **Start with Windows** | Opens Kinetic hidden in the tray at sign-in, so your remaps and driver settings are applied straight away. The row reads the start-up entry back from Windows and says if it is missing, points at the wrong program or has been switched off under Settings → Apps → Startup, with a **Repair** or **Open Windows settings** button |
+| **Your settings** | Settings are saved automatically every time you change something (the row shows when, and where, with a backup beside the file). **Save a copy…** writes them to a file you choose and **Load a copy…** restores one |
 | **Keep running in the tray** | Closing the window keeps the engine and your remaps running |
 | **Pause for games with anti-cheat** | On by default. Kinetic's engine steps aside while a protected game is in front |
 | **Release the mouse when input is blocked** | On by default. If Windows refuses the input Kinetic sends, the engine steps aside so the pointer keeps working |
@@ -406,13 +407,14 @@ If your mouse is not fully supported, Kinetic can send the details a maintainer 
 | Kernel mode says *Raw Accel reported a problem* or *writer.exe refused the settings* | Switch kernel mode off and on. If it repeats, open an issue with the exact message |
 | The pointer feels different in kernel mode | Raw Accel applies the curve its own way, so the feel can differ slightly from Kinetic's own processing. Turn smoothing down first, or switch kernel mode off |
 | Acceleration stays on after quitting Kinetic | Quit it from the tray (not by ending the process), so it can set the driver back to neutral. Switching kernel mode off also does this |
+| My settings are gone after a restart | Your profiles and settings are saved in `%APPDATA%\Kinetic\config.json` on every change, so they are not lost. What is lost is anything that only lives while Kinetic runs: the Raw Accel driver forgets its settings at every restart, and Kinetic's remaps only work while it is running. Turn on **Start with Windows** and check the row says *On* (use **Repair** if it does not). If a settings file ever cannot be read, Kinetic keeps it as `config.broken.json` and loads the last backup (`config.json.bak`) instead of starting empty |
 | My own Raw Accel settings were replaced | Kinetic writes the whole settings file while kernel mode is on. Turn kernel mode off to use Raw Accel on its own |
 
 ## Where Kinetic keeps its files
 
 | Path | What it holds |
 |---|---|
-| `%APPDATA%\Kinetic\config.json` | Your profiles, mappings, macros, DPI stages and learned buttons |
+| `%APPDATA%\Kinetic\config.json` | Your profiles, mappings, macros, DPI stages and learned buttons. The previous version is kept as `config.json.bak`, and an unreadable file is kept as `config.broken.json` |
 | `%APPDATA%\kinetic-app\settings.json` | App switches: start with Windows, tray, updates, game pause, failsafe, kernel mode, activity log |
 | `%APPDATA%\Kinetic\activity.log` | The activity log, if switched on (older entries move to `activity.old.log`) |
 | `%APPDATA%\Kinetic\rawaccel\` | The Raw Accel installer, writer, licence and the settings file Kinetic last wrote |

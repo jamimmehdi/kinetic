@@ -598,15 +598,37 @@ fn config_path() -> Option<PathBuf> {
     Some(PathBuf::from(base).join("Kinetic").join("config.json"))
 }
 
+/// Reads a config file, or None when it is missing or cannot be understood.
+fn read_config(path: &std::path::Path) -> Option<Config> {
+    let text = std::fs::read_to_string(path).ok()?;
+    match serde_json::from_str::<Config>(&text) {
+        Ok(c) => Some(c.sanitized()),
+        Err(e) => {
+            eprintln!("config: cannot read {}: {e}", path.display());
+            None
+        }
+    }
+}
+
 pub fn load() -> Config {
     let Some(path) = config_path() else { return Config::default() };
-    match std::fs::read_to_string(&path) {
-        Ok(text) => serde_json::from_str::<Config>(&text).map(Config::sanitized).unwrap_or_else(|e| {
-            eprintln!("config: ignoring unreadable {}: {e}", path.display());
-            Config::default()
-        }),
-        Err(_) => Config::default(),
+    if let Some(c) = read_config(&path) {
+        return c;
     }
+    if !path.exists() {
+        return Config::default();
+    }
+    // The file is there but unreadable. Keep it for inspection instead of overwriting it with
+    // defaults on the next save, and fall back to the last good copy if there is one.
+    let _ = std::fs::rename(&path, path.with_file_name("config.broken.json"));
+    read_config(&path.with_file_name("config.json.bak")).unwrap_or_default()
+}
+
+/// When the settings were last written to disk, in milliseconds since 1970 (0 when never).
+static SAVED_AT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
 }
 
 pub fn save(config: &Config) {
@@ -619,11 +641,35 @@ pub fn save(config: &Config) {
     match serde_json::to_string_pretty(config) {
         Ok(text) => {
             if std::fs::write(&tmp, text).is_ok() {
-                let _ = std::fs::rename(&tmp, &path);
+                // Keep the previous version as a backup, so one bad save can never lose everything.
+                if path.exists() {
+                    let _ = std::fs::copy(&path, path.with_file_name("config.json.bak"));
+                }
+                if std::fs::rename(&tmp, &path).is_ok() {
+                    SAVED_AT.store(now_ms(), std::sync::atomic::Ordering::Relaxed);
+                    crate::bus::publish(&saved_event());
+                }
             }
         }
         Err(e) => eprintln!("config: could not serialise: {e}"),
     }
+}
+
+/// The `saved` event: where the settings live and when they were last written.
+pub fn saved_event() -> serde_json::Value {
+    let mut at = SAVED_AT.load(std::sync::atomic::Ordering::Relaxed);
+    let path = config_path();
+    if at == 0 {
+        // Nothing saved this session: use the file's own time.
+        at = path
+            .as_ref()
+            .and_then(|p| std::fs::metadata(p).ok())
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+    }
+    serde_json::json!({ "t": "saved", "at": at, "path": path.map(|p| p.display().to_string()) })
 }
 
 static SHARED: OnceLock<RwLock<Config>> = OnceLock::new();
@@ -675,6 +721,30 @@ pub fn action_for_active(button: u8, shift: bool) -> Option<Action> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unreadable_files_are_told_apart_from_good_ones() {
+        let dir = std::env::temp_dir().join(format!("kinetic-config-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let bad = dir.join("bad.json");
+        std::fs::write(&bad, "{ this is not json").unwrap();
+        assert!(read_config(&bad).is_none(), "a damaged file must not pass for an empty config");
+        let good = dir.join("good.json");
+        std::fs::write(&good, serde_json::to_string(&Config::default()).unwrap()).unwrap();
+        assert!(read_config(&good).is_some());
+        assert!(read_config(&dir.join("missing.json")).is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn older_configs_without_the_newer_sections_still_load() {
+        // A 0.1.x file: a profile whose performance block predates the steady-hand settings.
+        let text = r#"{"profiles":[{"id":"default","name":"Default","mappings":[],"shift_mappings":[],"perf":{"native_dpi":800}}],"macros":[],"learned":[]}"#;
+        let cfg: Config = serde_json::from_str(text).expect("old file should parse");
+        let perf = &cfg.sanitized().profiles[0].perf;
+        assert_eq!(perf.native_dpi, 800);
+        assert_eq!(perf.steady, Steady::default());
+    }
 
     fn key(button: u8, keys: &[&str]) -> Mapping {
         Mapping { button, action: Action::Key { keys: keys.iter().map(|s| s.to_string()).collect() } }

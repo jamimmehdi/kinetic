@@ -1,6 +1,6 @@
 import { useContext, useEffect, useState } from "react";
 import { ThemeContext, Toggle, Top } from "../ui";
-import type { ActivityEntry, AppSettings, EngineState, KernelInstall, UpdateStatus } from "../engine";
+import type { ActivityEntry, AppSettings, EngineState, KernelInstall, StartupStatus, UpdateStatus } from "../engine";
 
 const ANY = [
   ["Global button remapping", "Low-level hooks, works in every app"],
@@ -57,6 +57,84 @@ export function describeActivity(e: ActivityEntry): { text: string; worked: bool
     default:
       return { text: String(d.state ?? ""), worked: null };
   }
+}
+
+const STARTUP_TEXT: Record<StartupStatus["state"], string> = {
+  dev: "Works in the installed app, not while developing.",
+  off: "Off. Kinetic only runs when you start it, so nothing is applied after a restart.",
+  ok: "On. Kinetic opens hidden in the tray when you sign in and applies your saved settings.",
+  missing: "Windows has no start-up entry for Kinetic, so it will not start on its own.",
+  "wrong-program": "The start-up entry points at a different program, so Kinetic will not start on its own.",
+  disabled: "Windows has Kinetic switched off under Settings → Apps → Startup.",
+};
+
+/** Start with Windows, showing what Windows will really do (read back, not assumed) and how to fix it. */
+function StartupRow({ app, change }: { app: AppSettings | null; change(patch: Partial<AppSettings>): void }) {
+  const bridge = window.kinetic?.startup;
+  const [status, setStatus] = useState<StartupStatus | null>(null);
+  const refresh = () => { bridge?.getStatus().then(setStatus).catch(() => {}); };
+  useEffect(refresh, [app?.startWithWindows]); // eslint-disable-line react-hooks/exhaustive-deps
+  const broken = status && ["missing", "wrong-program"].includes(status.state) && app?.startWithWindows;
+  const off = status?.state === "disabled" && app?.startWithWindows;
+
+  return (
+    <div className="row plain" style={{ borderTop: "1px solid var(--bd)" }}>
+      <span>
+        Start with Windows
+        <span className="sub" style={{ display: "block", fontSize: 12 }} role="status">
+          {!status ? "Checking…" : status.state === "dev" ? STARTUP_TEXT.dev : STARTUP_TEXT[app?.startWithWindows ? status.state : "off"]}
+        </span>
+      </span>
+      <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        {broken && <button type="button" className="btn2" onClick={() => bridge?.repair().then(setStatus)}>Repair</button>}
+        {off && <button type="button" className="btn2" onClick={() => bridge?.openWindowsSettings()}>Open Windows settings</button>}
+        <Toggle label="Start with Windows" on={!!app?.startWithWindows} disabled={!app} onChange={(v) => { change({ startWithWindows: v }); window.setTimeout(refresh, 900); }} />
+      </span>
+    </div>
+  );
+}
+
+/** Where the settings are kept, when they were last saved, and a way to keep or restore a copy. */
+function SavedSettingsCard({ engine }: { engine: EngineState }) {
+  const { saved } = engine;
+  const [note, setNote] = useState("");
+  const bridge = window.kinetic;
+  const when = saved && saved.at > 0 ? new Date(saved.at).toLocaleString([], { hour12: false }) : "not yet";
+
+  const save = async () => {
+    const where = await bridge?.exportSettings?.(JSON.stringify(engine.config, null, 2));
+    setNote(where ? `Saved a copy to ${where}` : where === null ? "" : "Saving a copy only works in the installed app.");
+  };
+  const load = async () => {
+    const r = await bridge?.importSettings?.();
+    if (!r || r.cancelled) return;
+    if (r.error) setNote(r.error);
+    else if (r.config) {
+      engine.setConfig(r.config as typeof engine.config);
+      setNote("Loaded. Your current settings were replaced.");
+    }
+  };
+
+  return (
+    <div className="card" style={{ padding: "6px 22px", flex: "none" }}>
+      <div className="row plain">
+        <span>
+          Your settings
+          <span className="sub" style={{ display: "block", fontSize: 12 }}>
+            Saved automatically every time you change something. Last saved: {when}.
+            {saved?.path ? ` Kept in ${saved.path}, with a backup beside it.` : ""}
+          </span>
+        </span>
+        <span style={{ display: "flex", gap: 10 }}>
+          <button type="button" className="btn2" onClick={save} disabled={!bridge?.exportSettings}>Save a copy…</button>
+          <button type="button" className="btn2" onClick={load} disabled={!bridge?.importSettings}>Load a copy…</button>
+        </span>
+      </div>
+      <div className="sub" style={{ fontSize: 12, padding: "0 0 12px" }} role="status">
+        {note || "Kernel mode and other driver settings are applied each time Kinetic starts, so keep Start with Windows on."}
+      </div>
+    </div>
+  );
 }
 
 /** Kernel mode: the Raw Accel driver does the movement work, which anti-cheat games accept. */
@@ -251,10 +329,7 @@ export function SettingsScreen({ engine, onRunSetup, onCalibrate, onRequestSuppo
       <div className="scroll-y" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 18 }}>
       <div className="card" style={{ padding: "6px 22px", flex: "none" }}>
         <div className="row plain"><span>Dark theme</span><Toggle label="Dark theme" on={theme === "dark"} onChange={toggle} /></div>
-        <div className="row plain" style={{ borderTop: "1px solid var(--bd)" }}>
-          <span>Start with Windows<span className="sub" style={{ display: "block", fontSize: 12 }}>Opens Kinetic in the tray at sign-in so remaps work straight away</span></span>
-          <Toggle label="Start with Windows" on={!!app?.startWithWindows} disabled={!app} onChange={(v) => change({ startWithWindows: v })} />
-        </div>
+        <StartupRow app={app} change={change} />
         <div className="row plain" style={{ borderTop: "1px solid var(--bd)" }}>
           <span>Keep running in the tray when the window is closed<span className="sub" style={{ display: "block", fontSize: 12 }}>The engine keeps your remaps working</span></span>
           <Toggle label="Keep running in the tray" on={!!app?.minimizeToTray} disabled={!app} onChange={(v) => change({ minimizeToTray: v })} />
@@ -284,6 +359,8 @@ export function SettingsScreen({ engine, onRunSetup, onCalibrate, onRequestSuppo
           <button type="button" className="btn2" onClick={onRequestSupport}>Request support</button>
         </div>
       </div>
+
+      <SavedSettingsCard engine={engine} />
 
       <KernelCard engine={engine} on={!!app?.kernelMode} disabled={!app} onToggle={(v) => { void change({ kernelMode: v }); }} />
 

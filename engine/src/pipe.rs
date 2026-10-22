@@ -142,6 +142,7 @@ fn handle_command(text: &str) {
             bus::publish(&movement::dpi_event());
             bus::publish(&razer::hardware_event());
             bus::publish(&kernel::status_event());
+            bus::publish(&config::saved_event());
         }
         Some("get_config") => bus::publish(&json!({ "t": "config", "config": config::current() })),
         Some("set_config") => {
