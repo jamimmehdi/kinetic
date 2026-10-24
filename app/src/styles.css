@@ -54,10 +54,39 @@ svg { flex: none; }
 a { text-decoration: none; color: inherit; }
 
 .app { display: flex; height: 100%; min-width: 1100px; }
+.content { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .rail {
   width: 76px; flex: none; background: var(--rail); border-right: 1px solid var(--bd);
   padding: 20px 0; display: flex; flex-direction: column; align-items: center; gap: 8px;
 }
+.rail.open { width: 228px; align-items: stretch; padding: 16px 14px; }
+@media (prefers-reduced-motion: no-preference) {
+  .rail { transition: width 0.18s ease; }
+}
+.rail-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; -webkit-app-region: drag; }
+.rail-head .logo { margin-bottom: 0; flex: none; }
+.rail-name { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.rail-name b { font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
+.rail-name .sub { font-size: 12px; }
+
+/* The window's own title bar: see-through, so it takes the page colour. */
+.titlebar { height: 40px; flex: none; display: flex; align-items: center; background: transparent; user-select: none; -webkit-app-region: drag; }
+.tb-drag { flex: 1; height: 100%; }
+.tb-engine, .tb-controls, .tb-controls button { -webkit-app-region: no-drag; }
+.tb-engine { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--mu); margin-right: 12px; }
+.tb-btn {
+  height: 26px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--bd); background: var(--card);
+  font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.tb-btn.primary { background: var(--ac); border-color: var(--ac); color: #fff; }
+.tb-btn:disabled { opacity: 0.5; cursor: default; }
+.tb-controls { display: flex; align-self: stretch; }
+.wc {
+  width: 46px; border: 0; background: transparent; color: var(--mu);
+  display: flex; align-items: center; justify-content: center; padding: 0; cursor: default;
+}
+.wc:hover { background: color-mix(in srgb, var(--tx) 10%, transparent); color: var(--tx); }
+.wc.close:hover { background: #e81123; color: #fff; }
 .logo {
   width: 40px; height: 40px; border-radius: 12px; background: var(--ac); color: #fff;
   display: flex; align-items: center; justify-content: center; margin-bottom: 12px;
@@ -68,6 +97,10 @@ a { text-decoration: none; color: inherit; }
   position: relative; cursor: pointer; padding: 0;
 }
 .ri:hover { color: var(--tx); }
+.ri.open { width: 100%; justify-content: flex-start; gap: 14px; padding: 0 14px; font-size: 14px; font-weight: 500; }
+.ri.open.on::before { left: -14px; }
+.ri-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ri.collapse { margin-top: 2px; }
 .ri.on { background: var(--acs); color: var(--act); }
 .ri.on::before {
   content: ""; position: absolute; left: -16px; top: 12px; bottom: 12px; width: 3px;
@@ -75,7 +108,7 @@ a { text-decoration: none; color: inherit; }
 }
 .ic { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 
-.main { flex: 1; padding: 24px 32px 28px; display: flex; flex-direction: column; gap: 18px; min-width: 0; min-height: 0; }
+.main { flex: 1; padding: 6px 32px 28px; display: flex; flex-direction: column; gap: 18px; min-width: 0; min-height: 0; }
 .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex: none; }
 .h1 { font-size: 26px; font-weight: 650; letter-spacing: -0.02em; margin: 0; }
 .sub { color: var(--mu); font-size: 13px; }

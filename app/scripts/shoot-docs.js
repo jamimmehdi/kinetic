@@ -9,7 +9,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (m) => fs.appendFileSync(path.join(out, "shoot.log"), m + "\n");
 
 const PAGE = `
-  window.__q = (sel, text) => { const els = [...document.querySelectorAll(sel)]; return text ? els.find((e) => e.textContent.trim() === text || e.textContent.trim().startsWith(text)) : els[0]; };
+  window.__q = (sel, text) => { const els = [...document.querySelectorAll(sel)].filter((e) => !e.closest(".rail")); return text ? els.find((e) => e.textContent.trim() === text || e.textContent.trim().startsWith(text)) : els[0]; };
   window.__click = (sel, text) => { const el = __q(sel, text); if (!el) throw new Error("no " + sel + " " + (text || "")); if (typeof el.click === "function") el.click(); else el.dispatchEvent(new MouseEvent("click", { bubbles: true })); };
   window.__set = (sel, v) => { const el = document.querySelector(sel); if (!el) throw new Error("no " + sel); const proto = el.tagName === "SELECT" ? HTMLSelectElement.prototype : HTMLInputElement.prototype; Object.getOwnPropertyDescriptor(proto, "value").set.call(el, v); el.dispatchEvent(new Event(el.tagName === "SELECT" ? "change" : "input", { bubbles: true })); };
   window.__nav = (n) => document.querySelector('[aria-label="' + n + '"]').click();
@@ -19,7 +19,7 @@ const PAGE = `
 
 async function session(query, theme, fn) {
   const win = new BrowserWindow({ width: 1500, height: 900, show: false, useContentSize: true, webPreferences: { sandbox: true } });
-  await win.loadURL("http://127.0.0.1:5173/" + query);
+  await win.loadURL((process.env.SHOOT_BASE || "http://127.0.0.1:5173/") + query);
   const run = async (code) => {
     try { return await win.webContents.executeJavaScript(code); } catch (e) { log("FAILED: " + code.trim().slice(0, 100) + " :: " + e); throw e; }
   };

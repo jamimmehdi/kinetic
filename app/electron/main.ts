@@ -29,9 +29,11 @@ interface AppSettings {
   blockedFailsafe: boolean;
   /** Let the Raw Accel driver do movement processing (works where injected input is refused). */
   kernelMode: boolean;
+  /** Start the engine whenever Kinetic opens. Off by default: the engine is started with the Start button. */
+  startEngineOnOpen: boolean;
 }
 
-const DEFAULT_SETTINGS: AppSettings = { startWithWindows: false, minimizeToTray: true, autoUpdate: true, setupDone: false, gameGuard: true, activityLog: false, blockedFailsafe: true, kernelMode: false };
+const DEFAULT_SETTINGS: AppSettings = { startWithWindows: false, minimizeToTray: true, autoUpdate: true, setupDone: false, gameGuard: true, activityLog: false, blockedFailsafe: true, kernelMode: false, startEngineOnOpen: false };
 
 let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -39,6 +41,8 @@ let socket: net.Socket | null = null;
 let buffer = "";
 let failedAttempts = 0;
 let spawnedEngine = false;
+/** Whether the engine should be running. It is only started when this is true, never by itself. */
+let engineWanted = false;
 let quitting = false;
 let connected = false;
 let settings: AppSettings = { ...DEFAULT_SETTINGS };
@@ -59,6 +63,7 @@ function loadSettings(): AppSettings {
       activityLog: parsed.activityLog === true,
       blockedFailsafe: parsed.blockedFailsafe !== false,
       kernelMode: parsed.kernelMode === true,
+      startEngineOnOpen: parsed.startEngineOnOpen === true,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -161,7 +166,7 @@ function connectToEngine() {
     failedAttempts = 0;
     buffer = "";
     connected = true;
-    toRenderer("engine:status", { connected: true });
+    toRenderer("engine:status", { connected: true, wanted: engineWanted });
     send({ cmd: "set_game_guard", enabled: settings.gameGuard });
     send({ cmd: "set_activity_log", enabled: settings.activityLog });
     send({ cmd: "set_failsafe", enabled: settings.blockedFailsafe });
@@ -188,11 +193,12 @@ function connectToEngine() {
     if (socket !== s) return;
     socket = null;
     connected = false;
-    toRenderer("engine:status", { connected: false });
+    toRenderer("engine:status", { connected: false, wanted: engineWanted });
     if (quitting) return;
     failedAttempts += 1;
-    // Nothing is listening: start the engine ourselves, and again every ~15 s if it keeps being gone.
-    if (failedAttempts === START_ENGINE_AFTER || (failedAttempts > START_ENGINE_AFTER && failedAttempts % 10 === 0)) {
+    // Nothing is listening. Start the engine only if it is wanted (hidden sign-in launch, the setting,
+    // or the Start button), and again every ~15 s if it keeps being gone.
+    if (engineWanted && (failedAttempts === START_ENGINE_AFTER || (failedAttempts > START_ENGINE_AFTER && failedAttempts % 10 === 0))) {
       spawnedEngine = false;
       startEngine();
     }
@@ -226,6 +232,8 @@ function createWindow() {
     minWidth: 1500,
     minHeight: 700,
     backgroundColor: "#0E1013",
+    // No system title bar: the page draws its own, with the engine button and window buttons.
+    frame: false,
     title: "Kinetic",
     icon: fs.existsSync(iconPath()) ? iconPath() : undefined,
     autoHideMenuBar: true,
@@ -246,9 +254,11 @@ function createWindow() {
     }
   });
   win.on("closed", () => { win = null; });
+  win.on("maximize", () => toRenderer("win:maximized", true));
+  win.on("unmaximize", () => toRenderer("win:maximized", false));
   // A page that (re)loads missed whatever was sent before it was ready, so catch it up.
   win.webContents.on("did-finish-load", () => {
-    toRenderer("engine:status", { connected });
+    toRenderer("engine:status", { connected, wanted: engineWanted });
     if (connected) send({ cmd: "snapshot" });
   });
 
@@ -281,7 +291,32 @@ function createTray() {
 // ---- app wiring ---------------------------------------------------------------------------------
 
 ipcMain.on("engine:send", (_e, message) => send(message));
-ipcMain.handle("engine:getStatus", () => ({ connected }));
+ipcMain.handle("engine:getStatus", () => ({ connected, wanted: engineWanted }));
+
+// The Start and Stop buttons in the title bar.
+ipcMain.handle("engine:start", () => {
+  engineWanted = true;
+  failedAttempts = 0;
+  spawnedEngine = false;
+  if (!connected) startEngine();
+  toRenderer("engine:status", { connected, wanted: engineWanted, missing: enginePath() === null });
+});
+ipcMain.handle("engine:stop", () => {
+  engineWanted = false;
+  // The engine puts the pointer settings back and the Raw Accel driver to neutral before it exits.
+  send({ cmd: "quit" });
+  toRenderer("engine:status", { connected, wanted: engineWanted });
+});
+
+// The title bar draws its own window buttons, so the window is asked to do the work.
+ipcMain.handle("win:minimize", () => win?.minimize());
+ipcMain.handle("win:toggleMaximize", () => {
+  if (!win) return;
+  if (win.isMaximized()) win.unmaximize();
+  else win.maximize();
+});
+ipcMain.handle("win:close", () => win?.close());
+ipcMain.handle("win:isMaximized", () => !!win?.isMaximized());
 ipcMain.handle("app:getSettings", () => settings);
 ipcMain.handle("app:setSettings", (_e, patch: Partial<AppSettings>) => {
   const pick = (key: keyof AppSettings) => (typeof patch[key] === "boolean" ? (patch[key] as boolean) : settings[key]);
@@ -294,6 +329,7 @@ ipcMain.handle("app:setSettings", (_e, patch: Partial<AppSettings>) => {
     activityLog: pick("activityLog"),
     blockedFailsafe: pick("blockedFailsafe"),
     kernelMode: pick("kernelMode"),
+    startEngineOnOpen: pick("startEngineOnOpen"),
   };
   send({ cmd: "set_kernel_mode", enabled: settings.kernelMode });
   saveSettings();
@@ -605,6 +641,9 @@ if (!app.requestSingleInstanceLock()) {
     settings = loadSettings();
     void applyLoginItem();
     setupUpdater();
+    // Launched at sign-in (hidden) the engine starts, so your settings apply without opening the app.
+    // Opened by hand it does not, unless the setting says so.
+    engineWanted = process.argv.includes("--hidden") || settings.startEngineOnOpen;
     createWindow();
     createTray();
     connectToEngine();

@@ -433,11 +433,30 @@ export type MeasureState =
   | { state: "done"; cm: number; counts: number; device: string; dpi: number }
   | { state: "failed"; reason: string };
 
+/** Whether the app is connected to the engine, and whether it is meant to be running. */
+export interface EngineConnection {
+  connected: boolean;
+  /** The engine was asked to run (started by the user, or at sign-in), so a missing one is starting. */
+  wanted?: boolean;
+  /** The engine program was not found next to the app. */
+  missing?: boolean;
+}
+
 export interface KineticBridge {
   onMessage(cb: (message: EngineMessage) => void): () => void;
-  onStatus(cb: (status: { connected: boolean }) => void): () => void;
+  onStatus(cb: (status: EngineConnection) => void): () => void;
   send(message: unknown): void;
-  getStatus?(): Promise<{ connected: boolean }>;
+  getStatus?(): Promise<EngineConnection>;
+  /** Start and stop the engine from the title bar. */
+  engine?: { start(): Promise<void>; stop(): Promise<void> };
+  /** The window's own buttons, since the system title bar is replaced. */
+  win?: {
+    minimize(): Promise<void>;
+    toggleMaximize(): Promise<void>;
+    close(): Promise<void>;
+    isMaximized(): Promise<boolean>;
+    onMaximized(cb: (maximized: boolean) => void): () => void;
+  };
   /** Desktop-only helpers. Missing in a plain browser. */
   pickFile?(): Promise<string | null>;
   pickProgram?(): Promise<string | null>;
@@ -466,6 +485,7 @@ export interface AppSettings {
   activityLog: boolean;
   blockedFailsafe: boolean;
   kernelMode: boolean;
+  startEngineOnOpen: boolean;
 }
 
 /** One line of the activity log. `detail` never holds key names. */
@@ -503,6 +523,12 @@ declare global {
 
 export interface EngineState {
   connected: boolean;
+  /** The engine is being started and has not answered yet. */
+  starting: boolean;
+  /** The engine program could not be found. */
+  engineMissing: boolean;
+  startEngine(): void;
+  stopEngine(): void;
   version: string | null;
   paused: boolean;
   /** The engine has stepped aside because a game with anti-cheat is in front (or input was blocked). */
@@ -572,6 +598,8 @@ const HISTORY = 100;
 
 export function useEngine(): EngineState {
   const [connected, setConnected] = useState(false);
+  const [wanted, setWanted] = useState(false);
+  const [engineMissing, setEngineMissing] = useState(false);
   const [version, setVersion] = useState<string | null>(null);
   const [paused, setPausedState] = useState(false);
   const [game, setGame] = useState(false);
@@ -609,10 +637,13 @@ export function useEngine(): EngineState {
     // The connection may have been made before this page existed, so ask for it and for a fresh picture.
     b.getStatus?.().then((s) => {
       setConnected(s.connected);
+      setWanted(!!s.wanted);
       if (s.connected) b.send({ cmd: "snapshot" });
     }).catch(() => {});
     const offStatus = b.onStatus((s) => {
       setConnected(s.connected);
+      setWanted(!!s.wanted);
+      setEngineMissing(!!s.missing);
       if (!s.connected) {
         setPressed(new Set());
         setRunningMacros(new Set());
@@ -750,7 +781,10 @@ export function useEngine(): EngineState {
   }, []);
 
   return {
-    connected, version, paused, game, asideReason, devices, config, activeProfile, activeApp, shiftActive, dpi, hardware, telemetry,
+    connected, starting: wanted && !connected && !engineMissing, engineMissing,
+    startEngine: useCallback(() => { void bridge.current?.engine?.start(); }, []),
+    stopEngine: useCallback(() => { void bridge.current?.engine?.stop(); }, []),
+    version, paused, game, asideReason, devices, config, activeProfile, activeApp, shiftActive, dpi, hardware, telemetry,
     speedHistory, apps, runningMacros, pressed, lastPressed, learn, candidates, measure, lastButton, report, activity, kernel, saved, sessions, liveSessions, sessionDetail, tremor, setConfig,
     requestSessions: useCallback(() => send({ cmd: "sessions_list" }), [send]),
     requestSession: useCallback((id: string) => send({ cmd: "session_get", id }), [send]),

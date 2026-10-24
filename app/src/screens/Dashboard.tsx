@@ -62,7 +62,7 @@ export function DashboardScreen({ engine }: { engine: EngineState }) {
             viewBox="20 110 940 760"
             role="img"
             aria-label="Line drawing of a wireless mouse"
-            style={{ position: "absolute", right: 28, top: "50%", transform: "translateY(-50%)", height: "84%", maxHeight: 440, maxWidth: "50%", width: "auto" }}
+            style={{ position: "absolute", right: 28, top: "50%", transform: "translateY(-50%)", height: "84%", maxHeight: 440, maxWidth: "min(50%, 340px)", width: "auto" }}
           >
             <path d={wirelessMouse.outline} fillRule="evenodd" style={{ fill: "var(--line)" }} />
           </svg>
@@ -72,7 +72,7 @@ export function DashboardScreen({ engine }: { engine: EngineState }) {
               <Tag kind="all">Any mouse</Tag>
             </div>
             <div className="num" style={{ fontSize: 84, lineHeight: 1, marginTop: 14, letterSpacing: "-0.03em" }}>{tracked ? tracked.dpi : dx}</div>
-            <div className="sub" style={{ marginTop: 8 }}>
+            <div className="sub" style={{ marginTop: 8, maxWidth: "min(300px, 46%)" }}>
               {tracked
                 ? `DPI · stage ${tracked.stage + 1} of ${tracked.stages} · ${tracked.dpi} (measured)`
                 : dpi?.custom

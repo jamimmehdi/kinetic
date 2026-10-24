@@ -68,11 +68,13 @@ Details are in [Games and anti-cheat](#games-and-anti-cheat) and [Kernel mode in
 
 Kinetic keeps running in the system tray when you close the window, so your remaps keep working. Quit it from the tray icon.
 
+**The engine does not start by itself when you open the app.** Kinetic has two parts: the window you see, and an engine that does the work. Open the window and the engine stays off until you press **Start engine** in the title bar. It starts on its own only when Kinetic launches with Windows at sign-in (so your settings apply without opening anything), or if you switch on **Start the engine when I open Kinetic** in Settings.
+
 ## First launch
 
 On first launch Kinetic walks you through a short setup so it knows how many buttons your mouse has.
 
-**1. Welcome.** Kinetic finds your mouse and starts its engine. Press **Start**.
+**1. Welcome.** Press **Start engine** in the title bar if the engine is not running yet. Kinetic then finds your mouse. Press **Start**.
 
 ![Setup: welcome](docs/screenshots/setup-1-welcome.png)
 
@@ -90,7 +92,11 @@ If a button gives a signal Kinetic has not seen before, it asks you to name it (
 
 ## Using Kinetic
 
-Kinetic has nine screens, reached from the rail on the left. The sun/moon button at the top right switches between the dark and light theme.
+Kinetic has nine screens, reached from the sidebar on the left. The sun/moon button at the top right of a screen switches between the dark and light theme.
+
+**The window.** There is no system title bar. A see-through title bar across the top holds the engine's status with a **Start engine** / **Stop** button, and the minimise, maximise and close buttons, which have no background until you hover them. Drag the empty part of the title bar to move the window. **Stop** puts your mouse back to normal (and the Raw Accel driver to neutral) before the engine exits.
+
+**The sidebar.** It shows each screen's name next to its icon, with Settings (a gear) at the bottom. **Collapse** at the very bottom shrinks it to icons only, and **Expand** brings the names back. Kinetic remembers your choice.
 
 ### Dashboard
 
@@ -246,6 +252,7 @@ Anything a profile leaves unmapped falls back to the Default profile. Settings c
 | **Dark theme** | Switches between the dark and light theme |
 | **Start with Windows** | Opens Kinetic hidden in the tray at sign-in, so your remaps and driver settings are applied straight away. The row reads the start-up entry back from Windows and says if it is missing, points at the wrong program or has been switched off under Settings → Apps → Startup, with a **Repair** or **Open Windows settings** button |
 | **Your settings** | Settings are saved automatically every time you change something (the row shows when, and where, with a backup beside the file). **Save a copy…** writes them to a file you choose and **Load a copy…** restores one |
+| **Start the engine when I open Kinetic** | Off by default. With it off, open the app and press **Start engine**. Launched with Windows at sign-in, the engine always starts |
 | **Keep running in the tray** | Closing the window keeps the engine and your remaps running |
 | **Pause for games with anti-cheat** | On by default. Kinetic's engine steps aside while a protected game is in front |
 | **Release the mouse when input is blocked** | On by default. If Windows refuses the input Kinetic sends, the engine steps aside so the pointer keeps working |
@@ -423,7 +430,7 @@ If your mouse is not fully supported, Kinetic can send the details a maintainer 
 | Problem | What to do |
 |---|---|
 | The pointer freezes in a game | Keep **Pause for games with anti-cheat** and **Release the mouse when input is blocked** switched on, or use [kernel mode](#kernel-mode-raw-accel-in-detail). Ctrl+Alt+Shift+P pauses Kinetic if the pointer is stuck. If it still happens, quit Kinetic from the tray before playing and [open an issue](https://github.com/jamimmehdi/kinetic/issues) with the game name |
-| *"Engine not running"* | Wait a few seconds, it restarts itself. If it stays, quit Kinetic from the tray and start it again |
+| *"Engine stopped"* or *"Engine not running"* | Press **Start engine** in the title bar. The engine does not start on its own when you open the app. If it says *Engine not found*, reinstall Kinetic |
 | A button does nothing when remapped | Check you are editing the profile that is active, and that the engine is not paused. The left button cannot be remapped |
 | Remaps do not work in a game | Expected for protected games, because the game refuses the input. See [Games and anti-cheat](#games-and-anti-cheat) |
 | An extra button is not detected | Settings → **Run again** under First-launch setup, or Buttons → **Press a button to detect** |

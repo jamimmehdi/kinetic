@@ -16,7 +16,8 @@ export function installDevMock() {
   if (window.kinetic) return;
 
   const messageListeners = new Set<(m: EngineMessage) => void>();
-  const statusListeners = new Set<(s: { connected: boolean }) => void>();
+  let mockConnected = true;
+  const statusListeners = new Set<(s: { connected: boolean; wanted?: boolean }) => void>();
   let config: EngineConfig = EMPTY_CONFIG;
   let stage = config.profiles[0].perf.active_stage;
   let paused = false;
@@ -28,7 +29,7 @@ export function installDevMock() {
   let moving = false;
   let pollingHz = 1000;
   let settings: AppSettings = {
-    startWithWindows: true, minimizeToTray: true, autoUpdate: true, gameGuard: true, activityLog: false, blockedFailsafe: true, kernelMode: false,
+    startWithWindows: true, minimizeToTray: true, autoUpdate: true, gameGuard: true, activityLog: false, blockedFailsafe: true, kernelMode: false, startEngineOnOpen: false,
     setupDone: (() => { try { return localStorage.getItem(setupDoneKey) === "1"; } catch { return false; } })(),
   };
   let candidates: LearnCandidate[] = [];
@@ -64,7 +65,7 @@ export function installDevMock() {
     },
     onStatus(cb) {
       statusListeners.add(cb);
-      queueMicrotask(() => cb({ connected: true }));
+      queueMicrotask(() => cb({ connected: mockConnected, wanted: mockConnected }));
       return () => statusListeners.delete(cb);
     },
     send(message) {
@@ -235,7 +236,27 @@ export function installDevMock() {
       window.open(`https://github.com/jamimmehdi/kinetic/issues/new?title=${encodeURIComponent(title)}`, "_blank");
       return { opened: true, truncated: true };
     },
-    getStatus: async () => ({ connected: true }),
+    getStatus: async () => ({ connected: mockConnected, wanted: mockConnected }),
+    engine: {
+      start: async () => {
+        statusListeners.forEach((l) => l({ connected: false, wanted: true }));
+        window.setTimeout(() => {
+          mockConnected = true;
+          statusListeners.forEach((l) => l({ connected: true, wanted: true }));
+        }, 900);
+      },
+      stop: async () => {
+        mockConnected = false;
+        statusListeners.forEach((l) => l({ connected: false, wanted: false }));
+      },
+    },
+    win: {
+      minimize: async () => {},
+      toggleMaximize: async () => {},
+      close: async () => {},
+      isMaximized: async () => false,
+      onMaximized: () => () => {},
+    },
     updates: {
       getStatus: async () => updateStatus,
       onStatus(cb) { updateListeners.add(cb); return () => updateListeners.delete(cb); },

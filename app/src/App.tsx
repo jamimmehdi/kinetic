@@ -10,6 +10,7 @@ import { SettingsScreen } from "./screens/Settings";
 import { SessionsScreen } from "./screens/Sessions";
 import { SteadyScreen } from "./screens/Steady";
 import { Setup } from "./Setup";
+import { TitleBar } from "./TitleBar";
 import { DeviceDpiContext, useDeviceDpi } from "./deviceDpi";
 import { DpiCalibrate } from "./DpiCalibrate";
 import { SupportRequest } from "./SupportRequest";
@@ -27,7 +28,21 @@ const NAV: { id: Screen; label: string; icon: string[] }[] = [
   { id: "macros", label: "Macros", icon: ["M8 5l11 7-11 7z"] },
   { id: "profiles", label: "Profiles", icon: ["M12 3l9 5-9 5-9-5z", "M3 13l9 5 9-5"] },
 ];
-const SETTINGS_ICON = ["M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z", "M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"];
+// A gear, so it is not mistaken for the theme button's sun.
+const SETTINGS_ICON = [
+  "M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z",
+  "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
+];
+const COLLAPSE_ICON = ["M11 17l-5-5 5-5", "M18 17l-5-5 5-5"];
+const EXPAND_ICON = ["M13 17l5-5-5-5", "M6 17l5-5-5-5"];
+
+function loadSidebarOpen(): boolean {
+  try {
+    return localStorage.getItem("kinetic.sidebar") !== "closed";
+  } catch {
+    return true;
+  }
+}
 
 function loadTheme(): Theme {
   try {
@@ -39,12 +54,13 @@ function loadTheme(): Theme {
   return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
 }
 
-function RailButton({ label, icon, on, onClick }: { label: string; icon: string[]; on: boolean; onClick(): void }) {
+function RailButton({ label, icon, on, open, onClick }: { label: string; icon: string[]; on: boolean; open: boolean; onClick(): void }) {
   return (
-    <button type="button" className={`ri ${on ? "on" : ""}`} aria-label={label} aria-current={on ? "page" : undefined} title={label} onClick={onClick}>
+    <button type="button" className={`ri ${on ? "on" : ""} ${open ? "open" : ""}`} aria-label={label} aria-current={on ? "page" : undefined} title={label} onClick={onClick}>
       <svg className="ic" viewBox="0 0 24 24" aria-hidden="true">
         {icon.map((d) => <path key={d} d={d} />)}
       </svg>
+      {open && <span className="ri-label">{label}</span>}
     </button>
   );
 }
@@ -53,6 +69,16 @@ export function App() {
   const engine = useEngine();
   const [screen, setScreen] = useState<Screen>("dashboard");
   const [theme, setTheme] = useState<Theme>(loadTheme);
+  const [sidebarOpen, setSidebarOpen] = useState(loadSidebarOpen);
+  const toggleSidebar = () =>
+    setSidebarOpen((open) => {
+      try {
+        localStorage.setItem("kinetic.sidebar", open ? "closed" : "open");
+      } catch {
+        // The choice is only a convenience.
+      }
+      return !open;
+    });
   // Profile being edited on the Buttons, Performance, Acceleration and Profiles screens.
   // Not the same as the active one, which follows the app in front.
   const [editingProfile, setEditingProfile] = useState(DEFAULT_PROFILE);
@@ -95,14 +121,37 @@ export function App() {
     <ThemeContext.Provider value={themeValue}>
       <DeviceDpiContext.Provider value={deviceDpi}>
       <div className="app">
-        <nav className="rail" aria-label="Main">
-          <div className="logo">
-            <svg className="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="3" width="12" height="18" rx="6" /><path d="M12 3v7" /></svg>
+        <nav className={`rail ${sidebarOpen ? "open" : ""}`} aria-label="Main">
+          <div className="rail-head">
+            <div className="logo">
+              <svg className="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="3" width="12" height="18" rx="6" /><path d="M12 3v7" /></svg>
+            </div>
+            {sidebarOpen && (
+              <div className="rail-name">
+                <b>Kinetic</b>
+                <span className="sub">Mouse control</span>
+              </div>
+            )}
           </div>
-          {NAV.map((n) => <RailButton key={n.id} label={n.label} icon={n.icon} on={screen === n.id} onClick={() => setScreen(n.id)} />)}
+          {NAV.map((n) => <RailButton key={n.id} label={n.label} icon={n.icon} on={screen === n.id} open={sidebarOpen} onClick={() => setScreen(n.id)} />)}
           <div style={{ flex: 1 }} />
-          <RailButton label="Settings" icon={SETTINGS_ICON} on={screen === "settings"} onClick={() => setScreen("settings")} />
+          <RailButton label="Settings" icon={SETTINGS_ICON} on={screen === "settings"} open={sidebarOpen} onClick={() => setScreen("settings")} />
+          <button
+            type="button"
+            className={`ri collapse ${sidebarOpen ? "open" : ""}`}
+            aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+            aria-expanded={sidebarOpen}
+            title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+            onClick={toggleSidebar}
+          >
+            <svg className="ic" viewBox="0 0 24 24" aria-hidden="true">
+              {(sidebarOpen ? COLLAPSE_ICON : EXPAND_ICON).map((d) => <path key={d} d={d} />)}
+            </svg>
+            {sidebarOpen && <span className="ri-label">Collapse</span>}
+          </button>
         </nav>
+        <div className="content">
+        <TitleBar engine={engine} />
         <main className="main">
           {screen === "dashboard" && <DashboardScreen engine={engine} />}
           {screen === "buttons" && <ButtonsScreen engine={engine} profileId={editing} onProfileChange={setEditingProfile} />}
@@ -122,6 +171,7 @@ export function App() {
           )}
           {screen === "settings" && <SettingsScreen engine={engine} onRunSetup={() => setShowSetup(true)} onCalibrate={() => setCalibrating(true)} onRequestSupport={() => setRequesting(true)} />}
         </main>
+        </div>
         {(setupDone === false || showSetup) && <Setup engine={engine} onDone={finishSetup} onCalibrate={() => setCalibrating(true)} onRequestSupport={() => setRequesting(true)} />}
         {calibrating && <DpiCalibrate engine={engine} onSave={deviceDpi.save} onClose={() => setCalibrating(false)} />}
         {requesting && <SupportRequest engine={engine} calibrations={deviceDpi.calibrations} onClose={() => setRequesting(false)} />}

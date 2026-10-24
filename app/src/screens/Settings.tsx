@@ -331,6 +331,10 @@ export function SettingsScreen({ engine, onRunSetup, onCalibrate, onRequestSuppo
         <div className="row plain"><span>Dark theme</span><Toggle label="Dark theme" on={theme === "dark"} onChange={toggle} /></div>
         <StartupRow app={app} change={change} />
         <div className="row plain" style={{ borderTop: "1px solid var(--bd)" }}>
+          <span>Start the engine when I open Kinetic<span className="sub" style={{ display: "block", fontSize: 12 }}>Off: open the app and press Start engine in the title bar. When Kinetic starts with Windows the engine always starts, so your settings apply at sign-in</span></span>
+          <Toggle label="Start the engine when I open Kinetic" on={!!app?.startEngineOnOpen} disabled={!app} onChange={(v) => change({ startEngineOnOpen: v })} />
+        </div>
+        <div className="row plain" style={{ borderTop: "1px solid var(--bd)" }}>
           <span>Keep running in the tray when the window is closed<span className="sub" style={{ display: "block", fontSize: 12 }}>The engine keeps your remaps working</span></span>
           <Toggle label="Keep running in the tray" on={!!app?.minimizeToTray} disabled={!app} onChange={(v) => change({ minimizeToTray: v })} />
         </div>

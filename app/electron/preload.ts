@@ -34,6 +34,21 @@ contextBridge.exposeInMainWorld("kinetic", {
     repair: (): Promise<unknown> => ipcRenderer.invoke("app:repairStartup"),
     openWindowsSettings: (): Promise<void> => ipcRenderer.invoke("app:openStartupSettings"),
   },
+  engine: {
+    start: (): Promise<void> => ipcRenderer.invoke("engine:start"),
+    stop: (): Promise<void> => ipcRenderer.invoke("engine:stop"),
+  },
+  win: {
+    minimize: (): Promise<void> => ipcRenderer.invoke("win:minimize"),
+    toggleMaximize: (): Promise<void> => ipcRenderer.invoke("win:toggleMaximize"),
+    close: (): Promise<void> => ipcRenderer.invoke("win:close"),
+    isMaximized: (): Promise<boolean> => ipcRenderer.invoke("win:isMaximized"),
+    onMaximized(cb: (maximized: boolean) => void): Unsubscribe {
+      const handler = (_e: unknown, m: boolean) => cb(m);
+      ipcRenderer.on("win:maximized", handler);
+      return () => ipcRenderer.removeListener("win:maximized", handler);
+    },
+  },
   pickProgram(): Promise<string | null> {
     return ipcRenderer.invoke("app:pickProgram");
   },
