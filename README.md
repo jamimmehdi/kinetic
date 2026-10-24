@@ -107,7 +107,7 @@ A live view of your mouse: the current DPI and stage, polling rate, battery (whe
 ![Dashboard (light)](docs/screenshots/dashboard-light.png)
 
 - Click a DPI stage on the right to switch to it. The auto-switch card shows how many apps are linked to profiles.
-- **Pause engine** turns off everything Kinetic's engine does to input until you press it again. In kernel mode it also sets the driver back to neutral.
+- **Pause Kinetic** (shown while the engine runs) turns off everything Kinetic does to your mouse until you press **Resume Kinetic**, and in kernel mode sets the driver back to neutral. The engine keeps running. It is different from **Stop** in the title bar, which stops the engine altogether. The button reads **Paused for a game** or **Paused: input blocked** when Kinetic has stepped aside by itself.
 - The button changes to **Paused for a game** when a protected game is in front, or **Paused: input blocked** when Windows is refusing the input Kinetic sends. Both clear on their own (see [Games and anti-cheat](#games-and-anti-cheat)).
 
 ### Buttons

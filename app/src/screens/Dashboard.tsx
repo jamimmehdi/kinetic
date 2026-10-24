@@ -46,13 +46,12 @@ export function DashboardScreen({ engine }: { engine: EngineState }) {
             : `Your ${active.name} profile is active.`
         }
       >
-        <Pill tone={engine.connected ? "ok" : "warn"}>
-          {engine.connected ? deviceLabel(device) : "Engine not running"}
-        </Pill>
+        {/* The title bar already says whether the engine runs, so these two only show while it does. */}
+        {engine.connected && <Pill tone="ok">{deviceLabel(device)}</Pill>}
         <span className="pill">Profile · <b style={{ fontWeight: 600 }}>{active.name}</b></span>
-        <button className="btn" type="button" title={engine.asideReason === "blocked" ? "Windows or another program is blocking the input Kinetic sends. It retries in a few seconds or when you switch windows." : engine.game ? "A game with anti-cheat is in front. Kinetic stays out of its way." : undefined} disabled={!engine.connected || engine.game} onClick={() => engine.setPaused(!engine.paused)}>
-          {engine.game ? (engine.asideReason === "blocked" ? "Paused: input blocked" : "Paused for a game") : engine.paused ? "Resume engine" : "Pause engine"}
-        </button>
+        {engine.connected && <button className="btn" type="button" title={engine.asideReason === "blocked" ? "Windows or another program is blocking the input Kinetic sends. It retries in a few seconds or when you switch windows." : engine.game ? "A game with anti-cheat is in front. Kinetic stays out of its way." : engine.paused ? "Kinetic is paused: your mouse works as if Kinetic were off. The engine keeps running." : "Pauses everything Kinetic does to your mouse. The engine keeps running; use Stop in the title bar to stop it."} disabled={engine.game} onClick={() => engine.setPaused(!engine.paused)}>
+          {engine.game ? (engine.asideReason === "blocked" ? "Paused: input blocked" : "Paused for a game") : engine.paused ? "Resume Kinetic" : "Pause Kinetic"}
+        </button>}
       </Top>
 
       <div className="grid12" style={{ gridTemplateRows: "minmax(0,1.5fr) minmax(0,1fr)" }}>
