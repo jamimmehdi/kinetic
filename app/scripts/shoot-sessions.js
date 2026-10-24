@@ -22,7 +22,7 @@ app.whenReady().then(async () => {
     await sleep(1200);
     await run(`document.querySelector('[aria-label="Sessions"]').click()`);
     await sleep(1200);
-    await run(`[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Track Valorant").click()`);
+    await run(`[...document.querySelectorAll("button")].find((b) => b.textContent.trim().startsWith("Choose a program")).click()`);
     await sleep(1200);
     await win.webContents.capturePage();
     await sleep(500);

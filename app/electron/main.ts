@@ -483,6 +483,17 @@ ipcMain.handle("app:pickFile", async () => {
   return result.canceled ? null : result.filePaths[0] ?? null;
 });
 
+// A file picker for programs only, for choosing an app to track.
+ipcMain.handle("app:pickProgram", async () => {
+  const options = {
+    title: "Choose the program to track",
+    properties: ["openFile" as const],
+    filters: [{ name: "Programs", extensions: ["exe"] }],
+  };
+  const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options);
+  return result.canceled ? null : result.filePaths[0] ?? null;
+});
+
 // ---- updates ------------------------------------------------------------------------------------
 
 type UpdateStatus =

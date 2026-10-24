@@ -194,7 +194,7 @@ Answers the question "did Kinetic actually work while I played?". Pick the apps 
 ![Sessions dashboard](docs/screenshots/sessions.png)
 
 **Set it up**
-1. Open **Sessions**. In **Tracked apps**, press **Track Valorant**, or type the app's file name (for example `game.exe`) and press **Add**. While the app is open it also appears in the list as you type.
+1. Open **Sessions**. In **Tracked apps**, press **Choose a program…**. Windows' file picker opens, so you can browse to any program's `.exe` and pick it. Kinetic adds it with a readable name. For Valorant there is also a **Track Valorant** shortcut, and if you pick `VALORANT.exe` (only the launcher) Kinetic tracks the game itself, `VALORANT-Win64-Shipping.exe`, instead. You can also type a file name and press **Add**.
 2. Play. Nothing else to do: a session starts when the app opens a window and ends when it closes. Closing Kinetic or removing the app from the list ends it too.
 
 **What you see**

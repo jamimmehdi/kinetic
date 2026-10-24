@@ -440,6 +440,7 @@ export interface KineticBridge {
   getStatus?(): Promise<{ connected: boolean }>;
   /** Desktop-only helpers. Missing in a plain browser. */
   pickFile?(): Promise<string | null>;
+  pickProgram?(): Promise<string | null>;
   getVersion?(): Promise<string>;
   showLog?(): Promise<void>;
   startup?: {

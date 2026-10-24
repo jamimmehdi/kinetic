@@ -159,17 +159,56 @@ function SessionRow({ s, on, onClick }: { s: SessionSummary; on: boolean; onClic
   );
 }
 
+/** A readable name for a program file, for example "Valorant" for VALORANT-Win64-Shipping.exe. */
+export function niceName(file: string): string {
+  const base = file
+    .replace(/\.exe$/i, "")
+    .replace(/[-_ ]?(win64|win32|x64|x86|shipping)\b/gi, "")
+    .replace(/[-_]+$/g, "")
+    .replace(/[-_]+/g, " ")
+    .trim();
+  if (!base) return file;
+  // ALL CAPS reads as shouting; a name like "Notepad" or "Valorant" is nicer.
+  const text = base === base.toUpperCase() ? base.charAt(0) + base.slice(1).toLowerCase() : base === base.toLowerCase() ? base.charAt(0).toUpperCase() + base.slice(1) : base;
+  return text.slice(0, 40);
+}
+
+/** Launchers that do not open a window of their own, and the program that does. */
+const REAL_PROGRAM: Record<string, { exe: string; note: string }> = {
+  "valorant.exe": { exe: "valorant-win64-shipping.exe", note: "VALORANT.exe is only the launcher, so Kinetic is tracking the game itself (VALORANT-Win64-Shipping.exe)." },
+};
+
 function TrackerCard({ engine }: { engine: EngineState }) {
   const { config, apps } = engine;
   const [text, setText] = useState("");
+  const [note, setNote] = useState("");
   const tracked = config.tracked;
   const VALORANT = "valorant-win64-shipping.exe";
 
   const add = (exe: string, name?: string) => {
     const e = exe.trim().toLowerCase();
     if (!e || tracked.some((t) => t.exe === e)) return;
-    engine.setConfig({ ...config, tracked: [...tracked, { exe: e, name: (name ?? e.replace(/\.exe$/, "")).slice(0, 40) }] });
+    engine.setConfig({ ...config, tracked: [...tracked, { exe: e, name: (name ?? niceName(e)).slice(0, 40) }] });
     setText("");
+  };
+
+  // Opens Windows' own file picker, so any program can be chosen without knowing its file name.
+  const browse = async () => {
+    const path = await window.kinetic?.pickProgram?.();
+    if (!path) return;
+    const file = (path.split(/[\\/]/).pop() ?? "").toLowerCase();
+    if (!file.endsWith(".exe")) {
+      setNote("Please choose a program (.exe).");
+      return;
+    }
+    const real = REAL_PROGRAM[file];
+    const exe = real?.exe ?? file;
+    if (tracked.some((t) => t.exe === exe)) {
+      setNote(`${niceName(exe)} is already tracked.`);
+      return;
+    }
+    setNote(real?.note ?? "");
+    add(exe, niceName(exe));
   };
   const remove = (exe: string) => engine.setConfig({ ...config, tracked: tracked.filter((t) => t.exe !== exe) });
 
@@ -185,6 +224,9 @@ function TrackerCard({ engine }: { engine: EngineState }) {
           </span>
         ))}
       </div>
+      <button type="button" className="btn" style={{ width: "100%", marginBottom: 10 }} onClick={browse} disabled={!window.kinetic?.pickProgram}>Choose a program…</button>
+      {note && <div className="sub" style={{ fontSize: 12, marginBottom: 10, lineHeight: 1.5 }} role="status">{note}</div>}
+      <div className="sub" style={{ fontSize: 12, marginBottom: 6 }}>Or type its file name:</div>
       <form
         style={{ display: "flex", gap: 8 }}
         onSubmit={(e) => {
@@ -200,7 +242,7 @@ function TrackerCard({ engine }: { engine: EngineState }) {
         <button type="button" className="btn2" style={{ marginTop: 10, height: 32 }} onClick={() => add(VALORANT, "Valorant")}>Track Valorant</button>
       )}
       <div className="sub" style={{ fontSize: 12, marginTop: 10, lineHeight: 1.5 }}>
-        A session starts when the app opens a window and ends when it closes. Pick the running app from the list when it is open.
+        A session starts when the app opens a window and ends when it closes. For a game, choose the game itself, not its launcher.
       </div>
     </div>
   );

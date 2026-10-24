@@ -215,6 +215,7 @@ export function installDevMock() {
       }
     },
     pickFile: async () => "C:\\Windows\\notepad.exe",
+    pickProgram: async () => "C:\\Riot Games\\VALORANT\\live\\ShooterGame\\Binaries\\Win64\\VALORANT-Win64-Shipping.exe",
     getAppSettings: async () => ({ ...settings }),
     setAppSettings: async (s) => {
       settings = { ...settings, ...s };

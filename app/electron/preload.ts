@@ -34,6 +34,9 @@ contextBridge.exposeInMainWorld("kinetic", {
     repair: (): Promise<unknown> => ipcRenderer.invoke("app:repairStartup"),
     openWindowsSettings: (): Promise<void> => ipcRenderer.invoke("app:openStartupSettings"),
   },
+  pickProgram(): Promise<string | null> {
+    return ipcRenderer.invoke("app:pickProgram");
+  },
   exportSettings(text: string): Promise<string | null> {
     return ipcRenderer.invoke("app:exportSettings", text);
   },
