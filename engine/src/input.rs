@@ -151,6 +151,7 @@ unsafe fn handle_raw(lparam: LPARAM) {
     if from_device {
         crate::measure::feed(&device, mouse.lLastX, mouse.lLastY);
         crate::tremor::feed(mouse.lLastX, mouse.lLastY);
+        crate::sessions::note_move();
     }
     movement::on_raw(RawMove {
         dx: mouse.lLastX,

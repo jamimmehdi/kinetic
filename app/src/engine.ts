@@ -128,11 +128,19 @@ export interface LearnedButton {
   label: string;
 }
 
+/** An app whose sessions Kinetic keeps a record of, for example a game. */
+export interface Tracked {
+  /** Executable file name, lower case. */
+  exe: string;
+  name: string;
+}
+
 export interface EngineConfig {
   profiles: Profile[];
   macros: MacroDef[];
   learned: LearnedButton[];
   auto_switch: boolean;
+  tracked: Tracked[];
 }
 
 export const DEFAULT_PROFILE = "default";
@@ -174,6 +182,7 @@ export const EMPTY_CONFIG: EngineConfig = {
   macros: [],
   learned: [],
   auto_switch: true,
+  tracked: [],
 };
 
 // ---- messages ----------------------------------------------------------------------------------
@@ -267,7 +276,79 @@ export type EngineMessage =
   | { t: "activity_history"; entries: ActivityEntry[]; enabled: boolean }
   | ({ t: "kernel" } & KernelStatus)
   | ({ t: "tremor" } & TremorState)
-  | { t: "saved"; at: number; path: string | null };
+  | { t: "saved"; at: number; path: string | null }
+  | { t: "sessions"; sessions: SessionSummary[]; live: string[] }
+  | { t: "session"; id: string; session: SessionDetail | null }
+  | { t: "session_live"; live: LiveSession[] };
+
+/** What Kinetic was doing at a moment of a tracked session. */
+export type SessionState = "working" | "standby" | "paused" | "game_pause" | "blocked" | "kernel_error" | "offline";
+
+export interface SessionSummary {
+  id: string;
+  exe: string;
+  name: string;
+  started: number;
+  ended: number | null;
+  last_seen: number;
+  ended_by: string | null;
+  /** The app was already running when Kinetic started, so its real start is not known. */
+  late_start: boolean;
+  live: boolean;
+  duration_ms: number;
+  working_ms: number;
+  standby_ms: number;
+  paused_ms: number;
+  game_pause_ms: number;
+  blocked_ms: number;
+  kernel_error_ms: number;
+  offline_ms: number;
+  kernel_ms: number;
+  front_ms: number;
+  moves: number;
+  sent: number;
+  seen: number;
+  refused: number;
+  buttons: number;
+  settings_changes: number;
+}
+
+/** The settings in use at a moment of a session. */
+export interface SessionSettings {
+  profile: string;
+  dpi_x: number | null;
+  dpi_y: number | null;
+  accel: string;
+  snap: boolean;
+  snap_degrees: number;
+  smoothing: number;
+  precision: boolean;
+  precision_below: number;
+  precision_factor: number;
+  speed_limit: number;
+  rotation: number;
+  kernel: boolean;
+  remaps: boolean;
+  game_pause_setting: boolean;
+}
+
+export interface SessionDetail extends SessionSummary {
+  /** [state, from, to] in milliseconds since 1970. */
+  segments: [SessionState, number, number][];
+  /** [start, moves, sent, seen, refused, buttons, inFront] for each ten second window. */
+  buckets: [number, number, number, number, number, number, number][];
+  notes: { t: number; settings: SessionSettings }[];
+}
+
+export interface LiveSession {
+  id: string;
+  exe: string;
+  name: string;
+  started: number;
+  state: SessionState;
+  duration_ms: number;
+  working_ms: number;
+}
 
 /** The result of the hold-still test for a shaky hand. */
 export interface TremorResult {
@@ -456,6 +537,15 @@ export interface EngineState {
   requestKernel(): void;
   /** When the settings were last written to disk (ms since 1970), and where. */
   saved: { at: number; path: string | null } | null;
+  /** Tracked sessions, newest first. */
+  sessions: SessionSummary[];
+  /** Sessions in progress right now. */
+  liveSessions: LiveSession[];
+  /** The full record of the session last asked for. */
+  sessionDetail: SessionDetail | null;
+  requestSessions(): void;
+  requestSession(id: string): void;
+  clearSessions(): void;
   tremor: TremorState;
   tremorStart(seconds: number): void;
   tremorCancel(): void;
@@ -507,6 +597,9 @@ export function useEngine(): EngineState {
   const [kernel, setKernel] = useState<KernelStatus | null>(null);
   const [tremor, setTremor] = useState<TremorState>({ state: "idle" });
   const [saved, setSaved] = useState<{ at: number; path: string | null } | null>(null);
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [liveSessions, setLiveSessions] = useState<LiveSession[]>([]);
+  const [sessionDetail, setSessionDetail] = useState<SessionDetail | null>(null);
   const bridge = useRef(window.kinetic);
 
   useEffect(() => {
@@ -570,6 +663,15 @@ export function useEngine(): EngineState {
           setSpeedHistory((prev) => [...prev.slice(1 - HISTORY), info.speed]);
           break;
         }
+        case "sessions":
+          setSessions(m.sessions);
+          break;
+        case "session":
+          setSessionDetail(m.session);
+          break;
+        case "session_live":
+          setLiveSessions(m.live);
+          break;
         case "saved":
           setSaved({ at: m.at, path: m.path });
           break;
@@ -648,7 +750,10 @@ export function useEngine(): EngineState {
 
   return {
     connected, version, paused, game, asideReason, devices, config, activeProfile, activeApp, shiftActive, dpi, hardware, telemetry,
-    speedHistory, apps, runningMacros, pressed, lastPressed, learn, candidates, measure, lastButton, report, activity, kernel, saved, tremor, setConfig,
+    speedHistory, apps, runningMacros, pressed, lastPressed, learn, candidates, measure, lastButton, report, activity, kernel, saved, sessions, liveSessions, sessionDetail, tremor, setConfig,
+    requestSessions: useCallback(() => send({ cmd: "sessions_list" }), [send]),
+    requestSession: useCallback((id: string) => send({ cmd: "session_get", id }), [send]),
+    clearSessions: useCallback(() => send({ cmd: "sessions_clear" }), [send]),
     tremorStart: useCallback((seconds: number) => send({ cmd: "tremor_start", seconds }), [send]),
     tremorCancel: useCallback(() => send({ cmd: "tremor_cancel" }), [send]),
     requestKernel: useCallback(() => send({ cmd: "kernel_refresh" }), [send]),

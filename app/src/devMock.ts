@@ -1,3 +1,4 @@
+import { demoSessions, summarize } from "./devSessions";
 import {
   DEFAULT_PROFILE, EMPTY_CONFIG, stageDpi,
   type AppSettings, type EngineConfig, type EngineMessage, type KineticBridge, type LearnCandidate, type UpdateStatus,
@@ -19,6 +20,7 @@ export function installDevMock() {
   let config: EngineConfig = EMPTY_CONFIG;
   let stage = config.profiles[0].perf.active_stage;
   let paused = false;
+  let demo = demoSessions();
   let measureTimer = 0;
   let tremorTimer = 0;
   let measureCm = 10;
@@ -51,6 +53,10 @@ export function installDevMock() {
         cb({ t: "engine", paused });
         cb({ t: "layer", shift: false });
         cb(dpiMessage());
+        cb({ t: "sessions", sessions: demo.map(summarize), live: demo.filter((d) => d.live).map((d) => d.id) });
+        for (const d of demo.filter((x) => x.live)) {
+          cb({ t: "session_live", live: [{ id: d.id, exe: d.exe, name: d.name, started: d.started, state: "working", duration_ms: Date.now() - d.started, working_ms: Date.now() - d.started }] });
+        }
         cb({ t: "saved", at: Date.now() - 90_000, path: "C:\\Users\\you\\AppData\\Roaming\\Kinetic\\config.json" });
         cb({ t: "hardware", connected: hwConnected, vendor: "Razer", dpi_x: stageDpi(perf(), stage)[0], dpi_y: stageDpi(perf(), stage)[1], polling_hz: pollingHz, polling_options: [125, 500, 1000], can_set_polling: true, can_set_dpi: true, battery: 69 });
       });
@@ -112,6 +118,18 @@ export function installDevMock() {
           if (!multi) setTimeout(() => emit({ t: "learn", state: "found", button: 7 }), 1500);
           break;
         }
+        case "sessions_list":
+          emit({ t: "sessions", sessions: demo.map(summarize), live: demo.filter((d) => d.live).map((d) => d.id) });
+          break;
+        case "session_get": {
+          const id = String((m as { id?: string }).id ?? "");
+          emit({ t: "session", id, session: demo.find((d) => d.id === id) ?? null });
+          break;
+        }
+        case "sessions_clear":
+          demo = demo.filter((d) => d.live);
+          emit({ t: "sessions", sessions: demo.map(summarize), live: demo.map((d) => d.id) });
+          break;
         case "tremor_start": {
           const seconds = Number((m as { seconds?: number }).seconds) || 10;
           let ms = 0;

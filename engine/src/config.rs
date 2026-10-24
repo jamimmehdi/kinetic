@@ -401,6 +401,19 @@ pub struct LearnedButton {
     pub label: String,
 }
 
+/// An app whose sessions Kinetic keeps a record of, for example a game.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Tracked {
+    /// Executable file name, lower case, for example `valorant-win64-shipping.exe`.
+    pub exe: String,
+    /// Name shown in the dashboard.
+    #[serde(default)]
+    pub name: String,
+}
+
+/// Most apps that can be tracked at once.
+const MAX_TRACKED: usize = 12;
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Config {
     #[serde(default)]
@@ -415,6 +428,9 @@ pub struct Config {
     /// Version 1 stored a single list of mappings here. Read once to migrate, never written.
     #[serde(default, skip_serializing)]
     pub mappings: Vec<Mapping>,
+    /// Apps to keep session records for.
+    #[serde(default)]
+    pub tracked: Vec<Tracked>,
 }
 
 fn yes() -> bool {
@@ -429,6 +445,7 @@ impl Default for Config {
             learned: Vec::new(),
             auto_switch: true,
             mappings: Vec::new(),
+            tracked: Vec::new(),
         }
     }
 }
@@ -547,6 +564,22 @@ impl Config {
             None => profiles.insert(0, default_profile()),
         }
         self.profiles = profiles;
+
+        let mut seen = HashSet::new();
+        let mut tracked = Vec::new();
+        for mut a in std::mem::take(&mut self.tracked) {
+            a.exe = clean_text(&a.exe, 120).to_ascii_lowercase();
+            a.name = clean_text(&a.name, 40);
+            if a.exe.is_empty() || !seen.insert(a.exe.clone()) {
+                continue;
+            }
+            if a.name.is_empty() {
+                a.name = a.exe.trim_end_matches(".exe").to_string();
+            }
+            tracked.push(a);
+        }
+        tracked.truncate(MAX_TRACKED);
+        self.tracked = tracked;
 
         self.learned.truncate(MAX_LEARNED);
         for l in &mut self.learned {
@@ -737,6 +770,20 @@ mod tests {
     }
 
     #[test]
+    fn tracked_apps_are_cleaned_and_deduplicated() {
+        let mut cfg = Config::default();
+        cfg.tracked = vec![
+            Tracked { exe: "  Valorant-Win64-Shipping.EXE ".into(), name: "".into() },
+            Tracked { exe: "valorant-win64-shipping.exe".into(), name: "again".into() },
+            Tracked { exe: "".into(), name: "nothing".into() },
+        ];
+        let cfg = cfg.sanitized();
+        assert_eq!(cfg.tracked.len(), 1);
+        assert_eq!(cfg.tracked[0].exe, "valorant-win64-shipping.exe");
+        assert_eq!(cfg.tracked[0].name, "valorant-win64-shipping", "an empty name falls back to the file name");
+    }
+
+    #[test]
     fn older_configs_without_the_newer_sections_still_load() {
         // A 0.1.x file: a profile whose performance block predates the steady-hand settings.
         let text = r#"{"profiles":[{"id":"default","name":"Default","mappings":[],"shift_mappings":[],"perf":{"native_dpi":800}}],"macros":[],"learned":[]}"#;
@@ -762,7 +809,7 @@ mod tests {
     }
 
     fn config(profiles: Vec<Profile>, macros: Vec<MacroDef>) -> Config {
-        Config { profiles, macros, learned: vec![], auto_switch: true, mappings: vec![] }
+        Config { profiles, macros, learned: vec![], auto_switch: true, mappings: vec![], tracked: vec![] }
     }
 
     #[test]

@@ -7,6 +7,7 @@ import { MacrosScreen } from "./screens/Macros";
 import { PerformanceScreen } from "./screens/Performance";
 import { ProfilesScreen } from "./screens/Profiles";
 import { SettingsScreen } from "./screens/Settings";
+import { SessionsScreen } from "./screens/Sessions";
 import { SteadyScreen } from "./screens/Steady";
 import { Setup } from "./Setup";
 import { DeviceDpiContext, useDeviceDpi } from "./deviceDpi";
@@ -14,7 +15,7 @@ import { DpiCalibrate } from "./DpiCalibrate";
 import { SupportRequest } from "./SupportRequest";
 import { ThemeContext, type Theme } from "./ui";
 
-type Screen = "dashboard" | "buttons" | "performance" | "acceleration" | "steady" | "macros" | "profiles" | "settings";
+type Screen = "dashboard" | "buttons" | "performance" | "acceleration" | "steady" | "sessions" | "macros" | "profiles" | "settings";
 
 const NAV: { id: Screen; label: string; icon: string[] }[] = [
   { id: "dashboard", label: "Dashboard", icon: ["M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"] },
@@ -22,6 +23,7 @@ const NAV: { id: Screen; label: string; icon: string[] }[] = [
   { id: "performance", label: "Performance", icon: ["M12 14l4-4", "M3.5 18a9 9 0 1 1 17 0"] },
   { id: "acceleration", label: "Acceleration", icon: ["M3 20c6 0 8-4 10-9s4-7 8-7"] },
   { id: "steady", label: "Steady hand", icon: ["M12 3v4M12 17v4M3 12h4M17 12h4", "M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z"] },
+  { id: "sessions", label: "Sessions", icon: ["M4 20V10M10 20V4M16 20v-7M22 20H2"] },
   { id: "macros", label: "Macros", icon: ["M8 5l11 7-11 7z"] },
   { id: "profiles", label: "Profiles", icon: ["M12 3l9 5-9 5-9-5z", "M3 13l9 5 9-5"] },
 ];
@@ -107,6 +109,7 @@ export function App() {
           {screen === "performance" && <PerformanceScreen engine={engine} profileId={editing} onProfileChange={setEditingProfile} />}
           {screen === "acceleration" && <AccelerationScreen engine={engine} profileId={editing} onProfileChange={setEditingProfile} />}
           {screen === "steady" && <SteadyScreen engine={engine} profileId={editing} onProfileChange={setEditingProfile} />}
+          {screen === "sessions" && <SessionsScreen engine={engine} />}
           {screen === "macros" && <MacrosScreen engine={engine} />}
           {screen === "profiles" && (
             <ProfilesScreen

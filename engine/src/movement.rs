@@ -332,6 +332,7 @@ const BLOCKED_AFTER: u32 = 60;
 
 pub fn note_injected_seen() {
     crate::activity::move_seen();
+    crate::sessions::note_seen();
     SENT_UNSEEN.store(0, Ordering::Relaxed);
 }
 
@@ -358,6 +359,7 @@ pub fn on_raw(m: RawMove) {
     if ix != 0 || iy != 0 {
         hook::send(&[hook::move_input(ix, iy)]);
         crate::activity::move_sent();
+        crate::sessions::note_sent();
         if SENT_UNSEEN.fetch_add(1, Ordering::Relaxed) + 1 >= BLOCKED_AFTER && !hook::test_mode() && state::failsafe_enabled() {
             // Injection is being dropped. Step aside so the physical mouse works again; the engine
             // tries again when another window comes to the front.

@@ -143,6 +143,7 @@ fn handle_command(text: &str) {
             bus::publish(&razer::hardware_event());
             bus::publish(&kernel::status_event());
             bus::publish(&config::saved_event());
+            bus::publish(&crate::sessions::list_event());
         }
         Some("get_config") => bus::publish(&json!({ "t": "config", "config": config::current() })),
         Some("set_config") => {
@@ -167,6 +168,7 @@ fn handle_command(text: &str) {
         Some("quit") => {
             razer::restore_blocking();
             kernel::restore_blocking();
+            crate::sessions::flush();
             crate::spi::restore_all();
             std::process::exit(0);
         }
@@ -182,6 +184,9 @@ fn handle_command(text: &str) {
             }
         }
         Some("set_game_guard") => state::set_guard(cmd.get("enabled").and_then(Value::as_bool).unwrap_or(true)),
+        Some("sessions_list") => bus::publish(&crate::sessions::list_event()),
+        Some("session_get") => bus::publish(&crate::sessions::detail_event(cmd.get("id").and_then(Value::as_str).unwrap_or(""))),
+        Some("sessions_clear") => crate::sessions::clear(),
         Some("tremor_start") => crate::tremor::start(cmd.get("seconds").and_then(Value::as_u64).unwrap_or(10), movement::current_native_dpi()),
         Some("tremor_cancel") => crate::tremor::cancel(),
         Some("set_kernel_mode") => kernel::set_enabled(cmd.get("enabled").and_then(Value::as_bool).unwrap_or(false)),

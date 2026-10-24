@@ -36,6 +36,7 @@ Kinetic is a small open-source alternative to vendor mouse software. It works wi
 | DPI stages (software scaling), separate X and Y | ✅ | |
 | Acceleration curves, rotation, angle snapping, smoothing, 1:1 raw movement | ✅ | |
 | Steady-hand settings for a shaky or uneven hand: precision zone, speed limit, hand bias, adjustable snapping, and a hold-still test that suggests them | ✅ | |
+| Session tracking: pick a game, and see for every session how long Kinetic worked, what it was doing and which settings it used | ✅ | |
 | Scroll: lines per notch, smooth scrolling, reverse direction | ✅ | |
 | Measured polling rate (read only) | ✅ | |
 | Find all the buttons on your mouse, including hidden extra ones | ✅ | |
@@ -89,7 +90,7 @@ If a button gives a signal Kinetic has not seen before, it asks you to name it (
 
 ## Using Kinetic
 
-Kinetic has eight screens, reached from the rail on the left. The sun/moon button at the top right switches between the dark and light theme.
+Kinetic has nine screens, reached from the rail on the left. The sun/moon button at the top right switches between the dark and light theme.
 
 ### Dashboard
 
@@ -185,6 +186,32 @@ Press **Test my hand** to have Kinetic measure your tremor instead of guessing.
 3. It then sorts the result into **none**, **light**, **medium** or **strong** and suggests a precision zone and speed smoothing to match. **Apply the suggestion** copies them into your profile. You can still change every value by hand.
 
 Only mouse movement is measured. Nothing is saved or sent, and the recording stops when you close the dialog. The suggestion deliberately leaves pointer smoothing alone, because delay costs more aim than it gains. The measurements are only as good as the test, so repeat it if the result looks off.
+
+### Sessions
+
+Answers the question "did Kinetic actually work while I played?". Pick the apps to track (a game, say). Whenever one is running, Kinetic keeps a record of the session, and this screen turns it into a dashboard.
+
+![Sessions dashboard](docs/screenshots/sessions.png)
+
+**Set it up**
+1. Open **Sessions**. In **Tracked apps**, press **Track Valorant**, or type the app's file name (for example `game.exe`) and press **Add**. While the app is open it also appears in the list as you type.
+2. Play. Nothing else to do: a session starts when the app opens a window and ends when it closes. Closing Kinetic or removing the app from the list ends it too.
+
+**What you see**
+- **Totals** across every session: how many, how long, the share of the time Kinetic was working, and the share with kernel mode on.
+- **Live banner** while a tracked app is running, with how long it has run and what Kinetic is doing right now.
+- **Timeline** of the whole session, one coloured bar. Each colour is something Kinetic was doing: **working** (your settings applied), **running with nothing to apply**, **paused by you**, **stepped aside for the game**, **input blocked** (Windows refused Kinetic's input), **kernel mode not active**, and **Kinetic was not running** (hatched). Hover a stretch for its start, end and length. A dot under the bar marks each time you changed a setting.
+- **Mouse activity** graph: mouse movement events per second in ten-second steps, so you can see your rounds and the pauses between them. Red bars mark moments when Windows refused input Kinetic tried to send.
+- **What worked**: a checklist for the session. Did Kinetic run the whole time, were your movement settings applied (and for how much of it), was kernel mode active, did Windows accept Kinetic's own input, were remaps and macros available, and did your settings change.
+- **Settings in use**: the profile, DPI, acceleration, angle snapping, smoothing, precision zone, speed limit, rotation, kernel mode and remaps at the start, plus a list of every change during the session.
+
+![A session where Windows refused Kinetic's input](docs/screenshots/sessions-trouble.png)
+
+The session above shows a bad evening: Kinetic opened after the game (the hatched start), and for three minutes Windows refused the input Kinetic's own engine was sending. The checklist says so, and points at kernel mode as the fix.
+
+**How it is recorded.** The engine, which is the thing being tracked, checks every second which tracked apps are running and writes down its own state, how many mouse events there were, how many of Kinetic's inputs Windows accepted or refused, and the settings in use. It keeps the last 60 sessions in `%APPDATA%\Kinetic\sessions.json`. Only app file names and counts are stored, never what you typed or clicked. If Kinetic stops during a game, it writes the gap as *not running* the next time it starts. **Clear history** deletes finished sessions; one in progress is kept.
+
+**Limits.** Kinetic can only record while it is running, so a session where it never started has no record at all. Detection looks for an open window, so it can lag a few seconds at the start and end. "Working" means Kinetic was applying your settings, which is what the engine can see. It cannot see inside the game, so it cannot prove the game itself used them.
 
 ### Macros
 
@@ -417,6 +444,7 @@ If your mouse is not fully supported, Kinetic can send the details a maintainer 
 | `%APPDATA%\Kinetic\config.json` | Your profiles, mappings, macros, DPI stages and learned buttons. The previous version is kept as `config.json.bak`, and an unreadable file is kept as `config.broken.json` |
 | `%APPDATA%\kinetic-app\settings.json` | App switches: start with Windows, tray, updates, game pause, failsafe, kernel mode, activity log |
 | `%APPDATA%\Kinetic\activity.log` | The activity log, if switched on (older entries move to `activity.old.log`) |
+| `%APPDATA%\Kinetic\sessions.json` | The record of finished sessions of tracked apps (the last 60). `sessions-active.json` holds the one in progress |
 | `%APPDATA%\Kinetic\rawaccel\` | The Raw Accel installer, writer, licence and the settings file Kinetic last wrote |
 | `C:\Windows\System32\drivers\rawaccel.sys` | The Raw Accel driver, only if you installed it |
 
@@ -464,13 +492,13 @@ npm run test:parity
 
 `cargo test` runs the engine's unit tests, including the ones that check the Raw Accel settings Kinetic generates. `test:parity` checks that the interface's acceleration curves match the engine's. `tests/e2e` drives a real engine with injected input; see [tests/e2e/README.md](tests/e2e/README.md).
 
-To regenerate the screenshots in this README, run `npx vite --port 5173 --host 127.0.0.1` in `app`, then run `electron scripts/shoot-docs.js`, `electron scripts/shoot-kernel.js` and `electron scripts/shoot-steady.js` with `SHOOT_OUT` set to `docs/screenshots`.
+To regenerate the screenshots in this README, run `npx vite --port 5173 --host 127.0.0.1` in `app`, then run `electron scripts/shoot-docs.js`, `electron scripts/shoot-kernel.js`, `electron scripts/shoot-steady.js` and `electron scripts/shoot-sessions.js` with `SHOOT_OUT` set to `docs/screenshots`.
 
 ## How it works
 
 Two programs that talk over a named pipe (`\\.\pipe\kinetic-engine`, one JSON object per line):
 
-- **`engine/`** (Rust): everything time-critical lives here so a busy or closed interface can never make the mouse stutter. It reads devices with Raw Input, hooks mouse input with a low-level hook to remap buttons and the wheel, moves the pointer with `SendInput` for DPI, acceleration and smoothing, runs macros, watches the foreground app for profiles, talks to Razer mice over HID, and (in kernel mode) drives the Raw Accel driver. The kernel mode code is `engine/src/kernel.rs`, and the hold-still test is `engine/src/tremor.rs`.
+- **`engine/`** (Rust): everything time-critical lives here so a busy or closed interface can never make the mouse stutter. It reads devices with Raw Input, hooks mouse input with a low-level hook to remap buttons and the wheel, moves the pointer with `SendInput` for DPI, acceleration and smoothing, runs macros, watches the foreground app for profiles, talks to Razer mice over HID, and (in kernel mode) drives the Raw Accel driver. The kernel mode code is `engine/src/kernel.rs`, the hold-still test is `engine/src/tremor.rs`, and the session tracker is `engine/src/sessions.rs`.
 - **`app/`** (Electron, React, TypeScript): the interface, tray icon, start-with-Windows, installer, the in-app updater, and the guided Raw Accel install. It starts the engine and reconnects if it stops.
 
 Safety rules built in:

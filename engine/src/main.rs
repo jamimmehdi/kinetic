@@ -23,6 +23,7 @@ mod razer;
 mod report;
 mod scroll;
 mod spi;
+mod sessions;
 mod state;
 mod tremor;
 
@@ -73,6 +74,7 @@ fn main() {
     scroll::start();
     razer::start();
     kernel::start();
+    sessions::start();
     movement::start_telemetry();
     std::thread::spawn(pipe::serve);
 
