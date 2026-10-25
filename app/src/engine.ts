@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { CrosshairState } from "./crosshair";
 
 // ---- config types (mirror the engine's config.json) -------------------------------------------
 
@@ -474,6 +475,17 @@ export interface KineticBridge {
   updates?: UpdatesBridge;
   getAppSettings?(): Promise<AppSettings>;
   setAppSettings?(s: Partial<AppSettings>): Promise<AppSettings>;
+  crosshair?: CrosshairBridge;
+}
+
+export interface CrosshairBridge {
+  get(): Promise<CrosshairState>;
+  set(state: CrosshairState): Promise<CrosshairState>;
+  onState(cb: (s: CrosshairState) => void): () => void;
+  /** Names of the monitors, in the order the state's `display` index uses. */
+  displays(): Promise<string[]>;
+  /** Whether the chosen hotkey is registered (another program may hold it). */
+  hotkeyOk(): Promise<boolean>;
 }
 
 export interface AppSettings {

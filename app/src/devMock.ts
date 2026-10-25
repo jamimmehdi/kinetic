@@ -1,3 +1,4 @@
+import { cleanState, type CrosshairState } from "./crosshair";
 import { demoSessions, summarize } from "./devSessions";
 import {
   DEFAULT_PROFILE, EMPTY_CONFIG, stageDpi,
@@ -28,6 +29,9 @@ export function installDevMock() {
   let measureCounts = () => 0;
   let moving = false;
   let pollingHz = 1000;
+  let crosshairMock: CrosshairState = (() => {
+    try { return cleanState(JSON.parse(localStorage.getItem("kinetic.mock.crosshair") ?? "null")); } catch { return cleanState(null); }
+  })();
   let settings: AppSettings = {
     startWithWindows: true, minimizeToTray: true, autoUpdate: true, gameGuard: true, activityLog: false, blockedFailsafe: true, kernelMode: false, startEngineOnOpen: false,
     setupDone: (() => { try { return localStorage.getItem(setupDoneKey) === "1"; } catch { return false; } })(),
@@ -224,6 +228,17 @@ export function installDevMock() {
       return { ...settings };
     },
     getVersion: async () => "0.1.0",
+    crosshair: {
+      get: async () => crosshairMock,
+      set: async (s) => {
+        crosshairMock = cleanState(s);
+        try { localStorage.setItem("kinetic.mock.crosshair", JSON.stringify(crosshairMock)); } catch { /* storage unavailable */ }
+        return crosshairMock;
+      },
+      displays: async () => ["Monitor 1 · 2560×1440 · main", "Monitor 2 · 1920×1080"],
+      hotkeyOk: async () => true,
+      onState: () => () => {},
+    },
     startup: {
       getStatus: async () => ({ state: "ok" as const }),
       repair: async () => ({ state: "ok" as const }),

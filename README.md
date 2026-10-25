@@ -263,6 +263,18 @@ Anything a profile leaves unmapped falls back to the Default profile. Settings c
 | **Activity log** | Off by default. Records what Kinetic did and whether Windows accepted it |
 | **Updates** | Current version, **Check for updates**, and automatic checks. Nothing installs until you say so |
 
+### Crosshair
+
+Draws a crosshair on top of your game. It works with any mouse, and it only draws: it never reads the game or touches its input.
+
+- **Builder:** pick a style (cross, T, ring, dot), then set length, thickness, gap, center dot, opacity, color, **glow**, a dark **outline** and an optional second color down the middle. The outline and the second color keep the crosshair readable on any background, even on a dim monitor.
+- **Animation:** pulse, breathe or spin, with a speed slider.
+- **HTML and CSS:** switch a crosshair to your own markup and styles. Animations (`@keyframes`) work. Scripts and web images are blocked.
+- **Overlay:** the switch (or the hotkey, F8 by default) shows it over every window. Choose the monitor and nudge the position.
+- **Saved:** crosshairs are kept on this PC in `%APPDATA%Kineticcrosshairs.json`.
+
+The game must run in **Borderless** or **Windowed** mode. Overlays cannot draw over exclusive Fullscreen. The overlay cannot make a pixel brighter than the monitor itself, so a very dim screen stays dim; use the outline and the second color for contrast.
+
 The three columns at the bottom summarise what works on any mouse, what needs a brand's protocol, and what is not possible.
 
 ## DPI on any mouse: measure and calibrate

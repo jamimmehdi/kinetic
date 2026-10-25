@@ -81,6 +81,17 @@ contextBridge.exposeInMainWorld("kinetic", {
   pickFile(): Promise<string | null> {
     return ipcRenderer.invoke("app:pickFile");
   },
+  crosshair: {
+    get: (): Promise<unknown> => ipcRenderer.invoke("crosshair:get"),
+    set: (state: unknown): Promise<unknown> => ipcRenderer.invoke("crosshair:set", state),
+    displays: (): Promise<string[]> => ipcRenderer.invoke("crosshair:displays"),
+    hotkeyOk: (): Promise<boolean> => ipcRenderer.invoke("crosshair:hotkeyOk"),
+    onState(cb: (state: unknown) => void): Unsubscribe {
+      const handler = (_e: unknown, state: unknown) => cb(state);
+      ipcRenderer.on("crosshair:state", handler);
+      return () => ipcRenderer.removeListener("crosshair:state", handler);
+    },
+  },
   getAppSettings() {
     return ipcRenderer.invoke("app:getSettings");
   },

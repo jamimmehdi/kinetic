@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, shell, Tray } from "electron";
+import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, nativeImage, screen, shell, Tray } from "electron";
 import { autoUpdater } from "electron-updater";
 import { execFile, spawn } from "node:child_process";
 import crypto from "node:crypto";
@@ -7,6 +7,7 @@ import https from "node:https";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import { cleanState, OVERLAY_SIZE, type CrosshairState } from "../src/crosshair";
 
 /** Named pipe the Rust engine listens on. Messages are one JSON object per line. */
 const PIPE_PATH = "\\\\.\\pipe\\kinetic-engine";
@@ -253,7 +254,11 @@ function createWindow() {
       win?.hide();
     }
   });
-  win.on("closed", () => { win = null; });
+  win.on("closed", () => {
+    win = null;
+    // The overlay is a window of its own; it must not keep the app alive after the main window is gone.
+    destroyOverlay();
+  });
   win.on("maximize", () => toRenderer("win:maximized", true));
   win.on("unmaximize", () => toRenderer("win:maximized", false));
   // A page that (re)loads missed whatever was sent before it was ready, so catch it up.
@@ -287,6 +292,129 @@ function createTray() {
   tray.setContextMenu(menu);
   tray.on("click", showWindow);
 }
+
+// ---- crosshair overlay ---------------------------------------------------------------------------
+// A transparent window that ignores the mouse and keeps to the top, centered on a monitor. It only
+// draws; it never reads the game or touches its input. Games must run in Borderless or Windowed mode
+// for any overlay to show.
+
+let crosshair: CrosshairState = cleanState(null);
+let overlayWin: BrowserWindow | null = null;
+let hotkeyOk = true;
+let crosshairSaveTimer: NodeJS.Timeout | null = null;
+
+const crosshairFile = () => path.join(app.getPath("appData"), "Kinetic", "crosshairs.json");
+
+function loadCrosshair() {
+  try {
+    crosshair = cleanState(JSON.parse(fs.readFileSync(crosshairFile(), "utf8")));
+  } catch {
+    crosshair = cleanState(null);
+  }
+}
+
+function saveCrosshairSoon() {
+  if (crosshairSaveTimer) clearTimeout(crosshairSaveTimer);
+  // Sliders send a change for every step; write once they settle.
+  crosshairSaveTimer = setTimeout(() => {
+    try {
+      const file = crosshairFile();
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file + ".tmp", JSON.stringify(crosshair, null, 2));
+      fs.renameSync(file + ".tmp", file);
+    } catch {
+      // Not saving must never stop the overlay.
+    }
+  }, 300);
+}
+
+function destroyOverlay() {
+  if (overlayWin && !overlayWin.isDestroyed()) overlayWin.destroy();
+  overlayWin = null;
+}
+
+/** Shows, moves or removes the overlay window so it matches the saved state. */
+function syncOverlay() {
+  if (!crosshair.overlay) return destroyOverlay();
+  const displays = screen.getAllDisplays();
+  const d = displays[crosshair.display] ?? screen.getPrimaryDisplay();
+  // The crosshair is measured in screen pixels, so the window and page are scaled against Windows' zoom.
+  const sf = d.scaleFactor || 1;
+  const size = Math.round(OVERLAY_SIZE / sf);
+  const bounds = {
+    x: Math.round(d.bounds.x + d.bounds.width / 2 - size / 2 + crosshair.offsetX / sf),
+    y: Math.round(d.bounds.y + d.bounds.height / 2 - size / 2 + crosshair.offsetY / sf),
+    width: size,
+    height: size,
+  };
+  if (!overlayWin || overlayWin.isDestroyed()) {
+    const w = new BrowserWindow({
+      ...bounds,
+      transparent: true,
+      backgroundColor: "#00000000",
+      frame: false,
+      resizable: false,
+      movable: false,
+      focusable: false,
+      skipTaskbar: true,
+      hasShadow: false,
+      fullscreenable: false,
+      show: false,
+      alwaysOnTop: true,
+      webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: true },
+    });
+    overlayWin = w;
+    w.setAlwaysOnTop(true, "screen-saver");
+    w.setIgnoreMouseEvents(true);
+    w.once("ready-to-show", () => w.showInactive());
+    w.on("closed", () => { if (overlayWin === w) overlayWin = null; });
+    w.webContents.on("did-finish-load", () => w.webContents.setZoomFactor(1 / sf));
+    const devUrl = process.env.VITE_DEV_SERVER_URL;
+    if (devUrl) void w.loadURL(new URL("overlay.html", devUrl).toString());
+    else void w.loadFile(path.join(__dirname, "..", "dist", "overlay.html"));
+  } else {
+    overlayWin.setBounds(bounds);
+    overlayWin.webContents.setZoomFactor(1 / sf);
+  }
+}
+
+function registerCrosshairHotkey() {
+  globalShortcut.unregisterAll();
+  try {
+    hotkeyOk = globalShortcut.register(crosshair.hotkey, () => {
+      crosshair = { ...crosshair, overlay: !crosshair.overlay };
+      applyCrosshair();
+    });
+  } catch {
+    hotkeyOk = false;
+  }
+}
+
+/** Puts the current state on screen, tells every page, and saves it. */
+function applyCrosshair() {
+  syncOverlay();
+  toRenderer("crosshair:state", crosshair);
+  if (overlayWin && !overlayWin.isDestroyed()) overlayWin.webContents.send("crosshair:state", crosshair);
+  saveCrosshairSoon();
+}
+
+ipcMain.handle("crosshair:get", () => crosshair);
+ipcMain.handle("crosshair:set", (_e, raw: unknown) => {
+  const next = cleanState(raw);
+  const hotkeyChanged = next.hotkey !== crosshair.hotkey;
+  crosshair = next;
+  if (hotkeyChanged) registerCrosshairHotkey();
+  applyCrosshair();
+  return crosshair;
+});
+ipcMain.handle("crosshair:hotkeyOk", () => hotkeyOk);
+ipcMain.handle("crosshair:displays", () =>
+  screen.getAllDisplays().map((d, i) => {
+    const w = Math.round(d.size.width * d.scaleFactor);
+    const h = Math.round(d.size.height * d.scaleFactor);
+    return `Monitor ${i + 1} · ${w}×${h}${d.id === screen.getPrimaryDisplay().id ? " · main" : ""}`;
+  }),
+);
 
 // ---- app wiring ---------------------------------------------------------------------------------
 
@@ -647,8 +775,15 @@ if (!app.requestSingleInstanceLock()) {
     createWindow();
     createTray();
     connectToEngine();
+    loadCrosshair();
+    registerCrosshairHotkey();
+    syncOverlay();
+    screen.on("display-added", syncOverlay);
+    screen.on("display-removed", syncOverlay);
+    screen.on("display-metrics-changed", syncOverlay);
   });
   app.on("before-quit", () => { quitting = true; });
+  app.on("will-quit", () => globalShortcut.unregisterAll());
   app.on("window-all-closed", () => {
     // Without the tray option the app ends with its window, and takes the engine with it.
     if (!settings.minimizeToTray) {

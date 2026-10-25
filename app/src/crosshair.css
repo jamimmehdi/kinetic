@@ -1,0 +1,7 @@
+@keyframes xh-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.35); } }
+@keyframes xh-breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+@keyframes xh-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .xh-preview svg { animation: none !important; }
+}

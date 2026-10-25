@@ -22,5 +22,6 @@ export default defineConfig({
   base: "./",
   plugins: [react(), productionCsp],
   server: { port: 5173, strictPort: true },
-  build: { outDir: "dist", emptyOutDir: true },
+  // Two pages: the app, and the click-through crosshair window that sits over games.
+  build: { outDir: "dist", emptyOutDir: true, rollupOptions: { input: { main: "index.html", overlay: "overlay.html" } } },
 });
